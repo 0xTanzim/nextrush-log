@@ -8,9 +8,14 @@ Node.js • Bun • Deno • Browser • React • Next.js • Edge
 
 [![npm](https://img.shields.io/npm/v/@nextrush/log?color=blue)](https://www.npmjs.com/package/@nextrush/log)
 [![bundle](https://img.shields.io/bundlephobia/minzip/@nextrush/log?label=size)](https://bundlephobia.com/package/@nextrush/log)
-[![license](https://img.shields.io/npm/l/@nextrush/log)](./LICENSE)
+[![license](https://img.shields.io/github/license/0xTanzim/nextrush-log)](https://github.com/0xTanzim/nextrush-log/blob/main/LICENSE)
+[![docs](https://img.shields.io/badge/docs-vitepress-blueviolet)](https://0xtanzim.github.io/nextrush-log/)
 
 </div>
+
+---
+
+**[Documentation Site →](https://0xtanzim.github.io/nextrush-log/)**
 
 ---
 

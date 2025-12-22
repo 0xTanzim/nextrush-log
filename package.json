@@ -91,7 +91,7 @@
   "bugs": {
     "url": "https://github.com/0xTanzim/nextrush-log/issues"
   },
-  "homepage": "https://github.com/0xTanzim/nextrush-log#readme",
+  "homepage": "https://0xtanzim.github.io/nextrush-log/",
   "peerDependencies": {
     "react": ">=17.0.0"
   },

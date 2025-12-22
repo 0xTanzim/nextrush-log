@@ -2,7 +2,7 @@ import { defineConfig } from 'vitepress';
 
 export default defineConfig({
   base: '/nextrush-log/',
-  
+
   title: '@nextrush/log',
   description: 'Universal logging for modern JavaScript',
 
@@ -47,6 +47,7 @@ export default defineConfig({
 
     socialLinks: [
       { icon: 'github', link: 'https://github.com/0xTanzim/nextrush-log' },
+      { icon: 'npm', link: 'https://www.npmjs.com/package/@nextrush/log' },
     ],
 
     footer: {
