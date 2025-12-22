@@ -216,29 +216,22 @@ export function isProductionBuild(): boolean {
   // Check standard NODE_ENV
   const nodeEnv = getEnvVar('NODE_ENV');
   if (nodeEnv === 'production') return true;
+  if (nodeEnv === 'development' || nodeEnv === 'test') return false;
 
   // Check Vite's MODE
   const mode = getEnvVar('MODE');
   if (mode === 'production') return true;
+  if (mode === 'development') return false;
 
-  // Check PROD flag (Vite sets this)
+  // Check PROD/DEV flags (Vite sets these)
   const prod = getEnvVar('PROD');
   if (prod === 'true') return true;
 
-  // Browser detection: check if running minified code (heuristic)
-  if (detectBrowser()) {
-    // In production builds, function names are typically minified
-    // This is a fallback heuristic
-    try {
-      const testFn = function namedFunction() { /* test */ };
-      // If function name is preserved, likely development
-      // This heuristic can be overridden by explicit env vars
-      if (testFn.name !== 'namedFunction') return true;
-    } catch {
-      // Ignore
-    }
-  }
+  const dev = getEnvVar('DEV');
+  if (dev === 'true') return false;
 
+  // If no explicit environment is set, default to development
+  // This is safer than false positives for production
   return false;
 }
 

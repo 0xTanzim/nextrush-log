@@ -46,7 +46,7 @@ function someDeepFunction() {
   const ctx = getAsyncContext();
   console.log(ctx?.correlationId); // 'req-123'
   console.log(ctx?.metadata);      // { userId: '456' }
-  
+
   // Or get just the correlation ID
   const corrId = getContextCorrelationId();
 }
@@ -85,12 +85,12 @@ Context can be nested and merged:
 ```typescript
 await runWithContext({ correlationId: 'req-123' }, async () => {
   log.info('Outer context'); // correlationId: 'req-123'
-  
+
   await runWithContext({ metadata: { step: 'processing' } }, async () => {
     // Inner context inherits correlationId and adds metadata
     log.info('Inner context'); // correlationId: 'req-123', step: 'processing'
   });
-  
+
   log.info('Back to outer'); // correlationId: 'req-123'
 });
 ```
@@ -189,7 +189,7 @@ const log = createLogger('MyService');
 await runWithContext({ correlationId: 'req-123' }, async () => {
   // Logger automatically includes correlationId from async context
   log.info('This log has correlationId');
-  
+
   // Child loggers also inherit the context
   const childLog = log.child('SubModule');
   childLog.info('Child also has correlationId');

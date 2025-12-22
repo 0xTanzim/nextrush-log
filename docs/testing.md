@@ -19,9 +19,9 @@ import { createMockLogger, expectLogged, expectNoErrors } from '@nextrush/log/te
 describe('MyService', () => {
   it('should log success message', () => {
     const mockLog = createMockLogger();
-    
+
     myService.doSomething(mockLog);
-    
+
     expectLogged(mockLog, 'info', 'Operation completed');
     expectNoErrors(mockLog);
   });
