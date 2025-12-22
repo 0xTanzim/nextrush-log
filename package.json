@@ -1,6 +1,6 @@
 {
   "name": "@nextrush/log",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Universal, zero-dependency, production-grade logger for modern JavaScript runtimes",
   "type": "module",
   "main": "./dist/index.cjs",
