@@ -1,6 +1,8 @@
 import { defineConfig } from 'vitepress';
 
 export default defineConfig({
+  base: '/nextrush-log/',
+  
   title: '@nextrush/log',
   description: 'Universal logging for modern JavaScript',
 
@@ -49,7 +51,7 @@ export default defineConfig({
 
     footer: {
       message: 'Released under the MIT License.',
-      copyright: 'Copyright © 2024 Tanzim Hossain',
+      copyright: 'Copyright © 2025 Tanzim Hossain',
     },
 
     search: {
