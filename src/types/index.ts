@@ -183,4 +183,5 @@ export interface ILogger {
   isLevelEnabled(level: LogLevel): boolean;
   setLevel(level: LogLevel): void;
   flush(): Promise<void>;
+  dispose(): void;
 }

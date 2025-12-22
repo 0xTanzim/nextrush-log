@@ -10,6 +10,7 @@ export {
 export { isError, serializeError } from './error.js';
 
 export {
-    DEFAULT_SENSITIVE_KEYS,
-    REDACTED_PLACEHOLDER, mergeSensitiveKeys, shouldRedact
+    DEFAULT_SENSITIVE_KEYS, REDACTED_PLACEHOLDER, containsSensitivePattern, mergeSensitiveKeys, redactSensitiveValues,
+    sanitizeContext,
+    shouldRedact
 } from './redaction.js';

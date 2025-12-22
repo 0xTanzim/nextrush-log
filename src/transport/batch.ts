@@ -4,10 +4,10 @@
  */
 
 import type {
-  BatchTransport,
-  BatchTransportOptions,
-  LogEntry,
-  LogTransport,
+    BatchTransport,
+    BatchTransportOptions,
+    LogEntry,
+    LogTransport,
 } from '../types/index.js';
 
 /** Default batch transport options */
@@ -19,6 +19,9 @@ const DEFAULT_OPTIONS: Required<BatchTransportOptions> = {
     // Silent by default
   },
 };
+
+/** Maximum buffer size to prevent memory leaks under persistent failures */
+const MAX_BUFFER_MULTIPLIER = 3;
 
 /**
  * Create a batch transport that buffers entries and flushes them periodically
@@ -84,8 +87,10 @@ export function createBatchTransport(
     // All retries failed
     onError(lastError, toFlush);
 
-    // Re-add entries to buffer with limit to prevent memory growth
-    buffer = [...toFlush.slice(-batchSize), ...buffer].slice(-batchSize * 2);
+    // Re-add entries to buffer with absolute max size to prevent memory leaks
+    const maxBufferSize = batchSize * MAX_BUFFER_MULTIPLIER;
+    const entriesToKeep = toFlush.slice(-batchSize);
+    buffer = [...entriesToKeep, ...buffer].slice(-maxBufferSize);
   };
 
   /**

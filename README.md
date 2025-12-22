@@ -4,10 +4,13 @@
 
 **Universal logging for modern JavaScript.**
 
+Zero dependencies • Tree-shakeable • Production-ready
+
 Node.js • Bun • Deno • Browser • React • Next.js • Edge
 
 [![npm](https://img.shields.io/npm/v/@nextrush/log?color=blue)](https://www.npmjs.com/package/@nextrush/log)
 [![bundle](https://img.shields.io/bundlephobia/minzip/@nextrush/log?label=size)](https://bundlephobia.com/package/@nextrush/log)
+[![coverage](https://img.shields.io/badge/coverage-89%25-brightgreen)](https://github.com/0xTanzim/nextrush-log)
 [![license](https://img.shields.io/github/license/0xTanzim/nextrush-log)](https://github.com/0xTanzim/nextrush-log/blob/main/LICENSE)
 [![docs](https://img.shields.io/badge/docs-vitepress-blueviolet)](https://0xtanzim.github.io/nextrush-log/)
 
@@ -15,7 +18,16 @@ Node.js • Bun • Deno • Browser • React • Next.js • Edge
 
 ---
 
-**[Documentation Site →](https://0xtanzim.github.io/nextrush-log/)**
+## Why @nextrush/log?
+
+- 🎯 **One config controls ALL loggers** — Singleton pattern for 100+ file projects
+- 🚀 **Zero dependencies** — No bloat, no supply chain risk
+- 🌍 **Universal** — Same API everywhere (Node, Browser, Edge, React)
+- 🔒 **Production-safe** — Auto-redaction, JSON output, level filtering
+- 📦 **Tiny** — Tree-shakeable, minimal bundle impact
+- 🧪 **Well-tested** — 89%+ coverage, 194 tests
+
+**[📖 Documentation](https://0xtanzim.github.io/nextrush-log/)** · **[🔧 API Reference](https://0xtanzim.github.io/nextrush-log/api)** · **[❓ FAQ](https://0xtanzim.github.io/nextrush-log/faq)**
 
 ---
 
@@ -39,128 +51,126 @@ log.warn('High memory', { used: '85%' });
 log.error('Failed', new Error('timeout'));
 ```
 
-**Development output** — pretty, colorful:
+**Development** — Pretty, colorful output:
 ```
 10:30:00 INFO  [MyApp] Server started { port: 3000 }
 10:30:01 WARN  [MyApp] High memory { used: '85%' }
 10:30:02 ERROR [MyApp] Failed Error: timeout
 ```
 
-**Production output** — JSON for log aggregators:
+**Production** — JSON for log aggregators (Datadog, CloudWatch, etc.):
 ```json
-{"timestamp":"...","level":"info","context":"MyApp","message":"Server started","data":{"port":3000}}
+{"timestamp":"2024-01-15T10:30:00.000Z","level":"info","context":"MyApp","message":"Server started","data":{"port":3000}}
 ```
+
+---
+
+## 🎯 Central Control (The Killer Feature)
+
+**One line controls ALL loggers across your entire application.**
+
+```typescript
+// app-entry.ts — Configure ONCE at startup
+import { disableLogging, configure, setGlobalLevel } from '@nextrush/log';
+
+// Option 1: Disable ALL logging instantly
+disableLogging();
+
+// Option 2: Configure globally
+configure({
+  enabled: process.env.NODE_ENV !== 'test',
+  minLevel: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
+});
+
+// Option 3: Set global level
+setGlobalLevel('error'); // Only errors across ALL loggers
+```
+
+**How it works:**
+```
+┌─────────────────────────────────────────────────────────────┐
+│              Global Config (Singleton)                       │
+│                                                             │
+│   disableLogging()  ←── Call from ANY file, ONE time        │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+                              │
+           Instantly affects ALL loggers
+                              │
+        ┌─────────────────────┼─────────────────────┐
+        │                     │                     │
+   file1.ts              file2.ts              file3.ts
+   createLogger()        createLogger()        createLogger()
+        │                     │                     │
+        ▼                     ▼                     ▼
+    DISABLED              DISABLED              DISABLED
+```
+
+**No need to change 100+ files.** Just configure once, all loggers obey.
 
 ---
 
 ## Log Levels
 
-Six levels from verbose to critical:
-
-| Level | Priority | When to Use |
-|-------|:--------:|-------------|
-| `trace` | 10 | Detailed debugging (function entry/exit) |
-| `debug` | 20 | Development debugging |
+| Level | Priority | Use Case |
+|-------|:--------:|----------|
+| `trace` | 10 | Detailed debugging |
+| `debug` | 20 | Development info |
 | `info` | 30 | Normal operations ← **production default** |
 | `warn` | 40 | Potential issues |
-| `error` | 50 | Errors (recoverable) |
+| `error` | 50 | Recoverable errors |
 | `fatal` | 60 | Critical failures |
-
-### Level Filtering
-
-Setting `minLevel` logs that level **and above**:
 
 ```typescript
 const log = createLogger('App', { minLevel: 'warn' });
 
-log.debug('ignored');  // ❌ below warn
-log.info('ignored');   // ❌ below warn
+log.debug('ignored');  // ❌ Below warn
 log.warn('logged');    // ✅
 log.error('logged');   // ✅
 ```
 
-| `minLevel` | trace | debug | info | warn | error | fatal |
-|------------|:-----:|:-----:|:----:|:----:|:-----:|:-----:|
-| `'trace'`  |  ✅   |  ✅   |  ✅  |  ✅  |  ✅   |  ✅   |
-| `'debug'`  |  ❌   |  ✅   |  ✅  |  ✅  |  ✅   |  ✅   |
-| `'info'`   |  ❌   |  ❌   |  ✅  |  ✅  |  ✅   |  ✅   |
-| `'warn'`   |  ❌   |  ❌   |  ❌  |  ✅  |  ✅   |  ✅   |
-| `'error'`  |  ❌   |  ❌   |  ❌  |  ❌  |  ✅   |  ✅   |
-
-### Runtime Level Control
-
-```typescript
-// Change level at runtime
-log.setLevel('error');  // Now only error + fatal
-
-// Check before expensive operations
-if (log.isLevelEnabled('debug')) {
-  log.debug('Data', expensiveComputation());
-}
-```
-
 ---
 
-## Environment Defaults
+## Environment Auto-Detection
 
-Auto-detects `NODE_ENV`:
-
-| Setting | Development | Test | Production |
-|---------|:-----------:|:----:|:----------:|
-| `minLevel` | `trace` | `trace` | `info` |
-| Output | Pretty | Pretty | JSON |
-| Colors | ✅ | ✅ | ❌ |
-| Redaction | ❌ | ❌ | ✅ |
-
-### Override Environment
+| Setting | Development | Production |
+|---------|:-----------:|:----------:|
+| `minLevel` | `trace` | `info` |
+| Output | Pretty | JSON |
+| Colors | ✅ | ❌ |
+| Redaction | ❌ | ✅ |
 
 ```typescript
-// Force production mode
+// Auto-detects NODE_ENV
+const log = createLogger('App');
+
+// Or force environment
 const log = createLogger('App', { env: 'production' });
-
-// Force development mode
-const log = createLogger('App', { env: 'development' });
-
-// Production JSON + debug logs
-const log = createLogger('App', {
-  env: 'production',
-  minLevel: 'debug'
-});
-
-// Only errors, always redact
-const log = createLogger('App', {
-  minLevel: 'error',
-  redact: true
-});
-```
-
-### Conditional Configuration
-
-```typescript
-const log = createLogger('App', {
-  minLevel: process.env.NODE_ENV === 'production' ? 'info' : 'trace',
-  redact: process.env.NODE_ENV === 'production',
-});
-
-// Or use env option
-const log = createLogger('App', {
-  env: process.env.NODE_ENV as 'development' | 'production',
-});
 ```
 
 ---
 
 ## Features
 
+### Namespace Filtering (Large Codebases)
+
+```typescript
+import { enableNamespaces, createLogger } from '@nextrush/log';
+
+// Only log from specific modules
+enableNamespaces(['api:*', 'auth:*']);
+
+createLogger('api:users').info('Logged');     // ✅
+createLogger('db:queries').info('Ignored');   // ❌
+```
+
 ### Child Loggers
 
 ```typescript
 const log = createLogger('App');
 const db = log.child('Database');
-const api = log.child('API');
 
 db.info('Connected');  // [App:Database] Connected
-api.info('Ready');     // [App:API] Ready
 ```
 
 ### Request Tracing
@@ -168,112 +178,59 @@ api.info('Ready');     // [App:API] Ready
 ```typescript
 const requestLog = log.withCorrelationId('req-abc123');
 requestLog.info('Processing');
-// Output: { ..., "correlationId": "req-abc123" }
+// Output includes: "correlationId": "req-abc123"
 ```
 
 ### Performance Timing
 
 ```typescript
 const timer = log.time('db-query');
-const result = await db.query('SELECT * FROM users');
-timer.end('Done', { rows: result.length });
-// "Done" { duration: 42, rows: 150 }
+await db.query('SELECT * FROM users');
+timer.end('Done', { rows: 100 });
+// "Done" { duration: 42, rows: 100 }
 ```
 
-### Sensitive Data Redaction
-
-In production, sensitive fields are auto-redacted:
+### Auto-Redaction (Production)
 
 ```typescript
 log.info('Login', {
-  user: 'john@example.com',
+  email: 'john@example.com',
   password: 'secret123',  // → "[REDACTED]"
   token: 'xyz',           // → "[REDACTED]"
 });
 ```
 
-Add custom keys:
-```typescript
-const log = createLogger('App', {
-  sensitiveKeys: ['ssn', 'bankAccount'],
-});
-```
-
----
-
-## Configuration
+### Custom Transports
 
 ```typescript
-const log = createLogger('App', {
-  // Environment
-  env: 'production',        // 'development' | 'test' | 'production'
-
-  // Filtering
-  minLevel: 'info',         // 'trace'|'debug'|'info'|'warn'|'error'|'fatal'
-
-  // Output
-  pretty: false,            // true = human readable, false = JSON
-  colors: false,            // Terminal colors
-  silent: false,            // Disable all output
-
-  // Security
-  redact: true,             // Redact sensitive keys
-  sensitiveKeys: ['custom'],// Additional keys to redact
-
-  // Context
-  correlationId: 'req-123',
-  metadata: { service: 'api', version: '2.0' },
-});
-```
-
----
-
-## Custom Transports
-
-```typescript
-import { createLogger, createBatchTransport } from '@nextrush/log';
+import { createBatchTransport } from '@nextrush/log';
 
 const { transport, flush } = createBatchTransport(
-  async (logs) => {
-    await fetch('/api/logs', {
-      method: 'POST',
-      body: JSON.stringify(logs)
-    });
-  },
+  async (logs) => fetch('/api/logs', {
+    method: 'POST',
+    body: JSON.stringify(logs)
+  }),
   { batchSize: 50, flushInterval: 5000 }
 );
 
-const log = createLogger('App');
 log.addTransport(transport);
-
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  await flush();
-  process.exit(0);
-});
 ```
 
 ---
 
-## Browser & React
-
-```typescript
-import { createLogger } from '@nextrush/log';
-
-const log = createLogger('App');
-log.info('Works in browser!');
-```
-
-### React
+## React Integration
 
 ```tsx
-import { LogProvider, useLogger } from '@nextrush/log/react';
+import { LoggerProvider, useLogger } from '@nextrush/log/react';
 
 function App() {
   return (
-    <LogProvider context="MyApp">
+    <LoggerProvider
+      context="MyApp"
+      globalConfig={{ enabled: process.env.NODE_ENV !== 'test' }}
+    >
       <MyComponent />
-    </LogProvider>
+    </LoggerProvider>
   );
 }
 
@@ -285,21 +242,38 @@ function MyComponent() {
 
 ---
 
-## API
+## API Quick Reference
 
-| Method | Description |
-|--------|-------------|
-| `createLogger(name, options?)` | Create logger |
+| Function | Description |
+|----------|-------------|
+| `createLogger(name, options?)` | Create a logger instance |
+| `configure(options)` | Set global configuration |
+| `disableLogging()` | Disable ALL logging globally |
+| `enableLogging()` | Re-enable logging |
+| `setGlobalLevel(level)` | Set global minimum level |
+| `enableNamespaces(patterns)` | Filter by namespace patterns |
+| `addGlobalTransport(fn)` | Add transport to ALL loggers |
+
+| Logger Method | Description |
+|---------------|-------------|
 | `log.trace/debug/info/warn/error/fatal()` | Log at level |
 | `log.child(name)` | Create child logger |
 | `log.withCorrelationId(id)` | Add correlation ID |
-| `log.time(label?)` | Start timer |
+| `log.time(label?)` | Start performance timer |
 | `log.setLevel(level)` | Change level at runtime |
-| `log.isLevelEnabled(level)` | Check if level enabled |
+| `log.isLevelEnabled(level)` | Check if level would log |
 | `log.addTransport(fn)` | Add custom transport |
-| `log.flush()` | Flush transports |
 
-[Full API →](./docs/api.md) · [Examples →](./docs/examples.md) · [Architecture →](./docs/architecture.md)
+---
+
+## Documentation
+
+- 📖 [Getting Started](https://0xtanzim.github.io/nextrush-log/getting-started)
+- 🎛️ [Global Configuration](https://0xtanzim.github.io/nextrush-log/global-configuration)
+- 📚 [API Reference](https://0xtanzim.github.io/nextrush-log/api)
+- 💡 [Examples](https://0xtanzim.github.io/nextrush-log/examples)
+- ✅ [Best Practices](https://0xtanzim.github.io/nextrush-log/best-practices)
+- ❓ [FAQ](https://0xtanzim.github.io/nextrush-log/faq)
 
 ---
 

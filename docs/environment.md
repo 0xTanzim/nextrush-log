@@ -90,10 +90,50 @@ const log = createLogger('App', {
 | Variable | Description |
 |----------|-------------|
 | `NODE_ENV` | `'production'` enables JSON output and redaction |
+| `LOG_LEVEL` | Set minimum log level (`trace`, `debug`, `info`, `warn`, `error`, `fatal`) |
+| `LOG_ENABLED` | `'false'` or `'0'` disables all logging |
+| `LOG_NAMESPACES` | Comma-separated namespace patterns (`api:*,auth:*`) |
 | `DEBUG` | `'true'` enables debug level in production |
 | `ENABLE_DEBUG_LOGS` | Alternative to `DEBUG` |
 | `NO_COLOR` | Disable colored output |
 | `FORCE_COLOR` | Force colored output |
+
+## Configure from Environment
+
+Use `configureFromEnv()` to automatically read environment variables:
+
+```typescript
+import { configureFromEnv } from '@nextrush/log';
+
+// Node.js / Bun
+configureFromEnv((name) => process.env[name]);
+
+// Vite
+configureFromEnv((name) => import.meta.env[name] ?? import.meta.env[`VITE_${name}`]);
+
+// Deno
+configureFromEnv((name) => Deno.env.get(name));
+```
+
+### Example .env Files
+
+```bash
+# .env.development
+NODE_ENV=development
+LOG_LEVEL=debug
+LOG_ENABLED=true
+LOG_NAMESPACES=*
+
+# .env.production
+NODE_ENV=production
+LOG_LEVEL=info
+LOG_ENABLED=true
+LOG_NAMESPACES=api:*,auth:*,payments:*
+
+# .env.test
+NODE_ENV=test
+LOG_ENABLED=false
+```
 
 ## Common Configurations
 

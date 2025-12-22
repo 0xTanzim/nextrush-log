@@ -3,11 +3,13 @@
  * The main logger implementation with flexible API
  */
 
-import { getEnvVar, getProcessId, getRuntime } from '../runtime/index.js';
+import { getAsyncContext } from '../context/index.js';
+import { getEnvVar, getProcessId, getRuntime, isProductionBuild } from '../runtime/index.js';
 import {
   createSerializationOptions,
   mergeSensitiveKeys,
   safeSerialize,
+  sanitizeContext,
   serializeError,
 } from '../serializer/index.js';
 import { outputToConsole } from '../transport/console.js';
@@ -24,6 +26,7 @@ import type {
   Timer,
 } from '../types/index.js';
 import { formatTimestamp, getTime } from '../utils/time.js';
+import { getGlobalConfig, isNamespaceEnabled, onConfigChange, type GlobalLoggerConfig } from './config.js';
 import { shouldLog as shouldLogLevel } from './levels.js';
 
 /**
@@ -40,11 +43,20 @@ export class Logger implements ILogger {
   private readonly context: string;
   private options: ResolvedLoggerOptions;
   private readonly sensitiveKeys: string[];
+  private cachedGlobalConfig: GlobalLoggerConfig;
+  private readonly configUnsubscribe: () => void;
 
   constructor(context: string, options: LoggerOptions = {}) {
-    this.context = context;
+    // Sanitize context to prevent log injection
+    this.context = sanitizeContext(context);
     this.options = this.resolveOptions(options);
     this.sensitiveKeys = mergeSensitiveKeys(this.options.sensitiveKeys);
+
+    // Cache global config for performance
+    this.cachedGlobalConfig = getGlobalConfig();
+    this.configUnsubscribe = onConfigChange(() => {
+      this.cachedGlobalConfig = getGlobalConfig();
+    });
   }
 
   /**
@@ -52,12 +64,13 @@ export class Logger implements ILogger {
    */
   private resolveOptions(options: LoggerOptions): ResolvedLoggerOptions {
     const runtime = getRuntime();
+    const globalConfig = getGlobalConfig();
     const nodeEnv = getEnvVar('NODE_ENV');
 
-    // Determine environment from options or NODE_ENV
-    let env: LoggerEnvironment = options.env ?? 'development';
-    if (!options.env) {
-      if (nodeEnv === 'production') env = 'production';
+    // Determine environment from options, global config, or NODE_ENV
+    let env: LoggerEnvironment = options.env ?? globalConfig.env ?? 'development';
+    if (!options.env && !globalConfig.env) {
+      if (nodeEnv === 'production' || isProductionBuild()) env = 'production';
       else if (nodeEnv === 'test') env = 'test';
     }
 
@@ -69,26 +82,27 @@ export class Logger implements ILogger {
       getEnvVar('ENABLE_DEBUG_LOGS') === 'true' ||
       getEnvVar('DEBUG') === 'true';
 
-    // Environment-based defaults
+    // Apply global defaults, then environment defaults, then user options
+    const defaults = globalConfig.defaults;
     const defaultMinLevel = isProd ? (enableDebug ? 'debug' : 'info') : 'trace';
     const defaultPretty = isDev || isTest;
     const defaultColors = runtime.supportsColors && (isDev || isTest);
-    const defaultRedact = isProd; // Only redact in production by default
+    const defaultRedact = isProd;
 
     const result: ResolvedLoggerOptions = {
-      minLevel: options.minLevel ?? defaultMinLevel,
-      pretty: options.pretty ?? defaultPretty,
-      colors: options.colors ?? defaultColors,
-      transports: options.transports ?? [],
-      metadata: options.metadata ?? {},
-      sensitiveKeys: options.sensitiveKeys ?? [],
-      maxDepth: options.maxDepth ?? 10,
-      maxStringLength: options.maxStringLength ?? 10000,
-      maxArrayLength: options.maxArrayLength ?? 100,
-      samplingRate: options.samplingRate ?? 0.1,
-      timestamps: options.timestamps ?? true,
-      silent: options.silent ?? false,
-      redact: options.redact ?? defaultRedact,
+      minLevel: options.minLevel ?? defaults.minLevel ?? defaultMinLevel,
+      pretty: options.pretty ?? defaults.pretty ?? defaultPretty,
+      colors: options.colors ?? defaults.colors ?? defaultColors,
+      transports: options.transports ?? defaults.transports ?? [],
+      metadata: { ...defaults.metadata, ...options.metadata },
+      sensitiveKeys: options.sensitiveKeys ?? defaults.sensitiveKeys ?? [],
+      maxDepth: options.maxDepth ?? defaults.maxDepth ?? 10,
+      maxStringLength: options.maxStringLength ?? defaults.maxStringLength ?? 10000,
+      maxArrayLength: options.maxArrayLength ?? defaults.maxArrayLength ?? 100,
+      samplingRate: options.samplingRate ?? defaults.samplingRate ?? 0.1,
+      timestamps: options.timestamps ?? defaults.timestamps ?? true,
+      silent: options.silent ?? defaults.silent ?? false,
+      redact: options.redact ?? defaults.redact ?? defaultRedact,
       env,
     };
 
@@ -101,13 +115,27 @@ export class Logger implements ILogger {
 
   /**
    * Check if a log level should be output (for console)
+   * Respects global configuration for enable/disable and namespace filtering
    */
   private shouldLog(level: LogLevel): boolean {
-    if (!shouldLogLevel(level, this.options.minLevel)) return false;
+    const globalConfig = this.cachedGlobalConfig;
+
+    // Global kill switch
+    if (!globalConfig.enabled) return false;
+
+    // Check namespace filtering
+    if (!isNamespaceEnabled(this.context)) return false;
+
+    // Global minimum level override
+    const effectiveMinLevel = globalConfig.minLevel ?? this.options.minLevel;
+    if (!shouldLogLevel(level, effectiveMinLevel)) return false;
+
+    // Global silent mode
+    if (globalConfig.silent) return false;
 
     // Apply sampling for trace/debug in production
     if (level === 'trace' || level === 'debug') {
-      const isDev = getEnvVar('NODE_ENV') !== 'production';
+      const isDev = getEnvVar('NODE_ENV') !== 'production' && !isProductionBuild();
       if (!isDev && Math.random() > this.options.samplingRate) {
         return false;
       }
@@ -149,8 +177,8 @@ export class Logger implements ILogger {
       } else if (typeof arg === 'string') {
         message = message ? `${message} ${arg}` : arg;
       } else if (arg !== null && typeof arg === 'object') {
-        // Merge object data
-        data = { ...data, ...(arg as LogContext) };
+        // Merge object data using Object.assign for better performance
+        Object.assign(data, arg as LogContext);
       } else if (typeof arg === 'number' || typeof arg === 'boolean' || typeof arg === 'bigint') {
         // Primitive values become part of the message
         const argStr = String(arg);
@@ -183,8 +211,15 @@ export class Logger implements ILogger {
     const { message, data, error } = this.parseArgs(args);
     const serializationOpts = this.getSerializationOptions();
 
-    // Merge metadata with call-specific data
-    const combinedData = { ...this.options.metadata, ...data };
+    // Get async context for automatic correlation ID and metadata
+    const asyncContext = getAsyncContext();
+
+    // Merge metadata: async context -> logger options -> call-specific data
+    const combinedData = {
+      ...asyncContext?.metadata,
+      ...this.options.metadata,
+      ...data
+    };
 
     // Build log entry
     const entry: LogEntry = {
@@ -195,8 +230,10 @@ export class Logger implements ILogger {
       runtime: getRuntime().environment,
     };
 
-    if (this.options.correlationId) {
-      entry.correlationId = this.options.correlationId;
+    // Correlation ID priority: logger options -> async context
+    const correlationId = this.options.correlationId ?? asyncContext?.correlationId;
+    if (correlationId) {
+      entry.correlationId = correlationId;
     }
 
     if (Object.keys(combinedData).length > 0) {
@@ -229,17 +266,29 @@ export class Logger implements ILogger {
   }
 
   /**
-   * Execute all registered transports
+   * Execute all registered transports (local and global)
    */
   private executeTransports(entry: LogEntry): void {
+    const globalConfig = this.cachedGlobalConfig;
+
+    // Execute global transports first
+    for (const transport of globalConfig.transports) {
+      try {
+        const result = transport(entry);
+        if (result instanceof Promise) {
+          result.catch(() => { /* Silently ignore */ });
+        }
+      } catch {
+        // Silently ignore transport errors
+      }
+    }
+
+    // Execute instance transports
     for (const transport of this.options.transports) {
       try {
         const result = transport(entry);
-        // Handle async transports silently
         if (result instanceof Promise) {
-          result.catch(() => {
-            // Silently ignore transport errors
-          });
+          result.catch(() => { /* Silently ignore */ });
         }
       } catch {
         // Silently ignore transport errors to prevent logging loops
@@ -359,6 +408,9 @@ export class Logger implements ILogger {
       ? `${this.context}:${additionalContext}`
       : this.context;
 
+    // Always inherit parent's correlationId unless explicitly overridden
+    const inheritedCorrelationId = options.correlationId ?? this.options.correlationId;
+
     const childOptions: LoggerOptions = {
       minLevel: options.minLevel ?? this.options.minLevel,
       pretty: options.pretty ?? this.options.pretty,
@@ -379,10 +431,9 @@ export class Logger implements ILogger {
       env: options.env ?? this.options.env,
     };
 
-    // Only set correlationId if defined
-    const correlationId = options.correlationId ?? this.options.correlationId;
-    if (correlationId !== undefined) {
-      childOptions.correlationId = correlationId;
+    // Only add correlationId if it's defined
+    if (inheritedCorrelationId !== undefined) {
+      childOptions.correlationId = inheritedCorrelationId;
     }
 
     return new Logger(newContext, childOptions);
@@ -458,5 +509,13 @@ export class Logger implements ILogger {
     if (flushPromises.length > 0) {
       await Promise.all(flushPromises);
     }
+  }
+
+  /**
+   * Clean up resources (unsubscribe from config changes)
+   * Call this when disposing of a logger instance
+   */
+  dispose(): void {
+    this.configUnsubscribe();
   }
 }

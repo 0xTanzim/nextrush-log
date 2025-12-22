@@ -176,23 +176,70 @@ export function resetRuntimeCache(): void {
 
 /**
  * Safely get environment variable across runtimes
+ * Supports Vite (import.meta.env), webpack (process.env), and native runtimes
  */
 export function getEnvVar(name: string): string | undefined {
   try {
-    // Node.js, Bun
+    // Node.js, Bun (also works with webpack bundled apps)
     if (g.process?.env) {
-      return g.process.env[name];
+      const value = g.process.env[name];
+      if (value !== undefined) return value;
     }
 
     // Deno
     if (g.Deno?.env) {
-      return g.Deno.env.get(name);
+      const value = g.Deno.env.get(name);
+      if (value !== undefined) return value;
+    }
+
+    // Vite / modern bundlers using import.meta.env
+    // Note: This is evaluated at build time by bundlers
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+    if (typeof import.meta !== 'undefined' && (import.meta as ImportMeta & { env?: Record<string, string> }).env) {
+      const env = (import.meta as ImportMeta & { env: Record<string, string> }).env;
+      // Vite prefixes with VITE_ by default
+      const value = env[name] ?? env[`VITE_${name}`];
+      if (value !== undefined) return value;
     }
   } catch {
     // Environment access not available
   }
 
   return undefined;
+}
+
+/**
+ * Detect if we're in a production build
+ * Works across all runtimes and bundlers
+ */
+export function isProductionBuild(): boolean {
+  // Check standard NODE_ENV
+  const nodeEnv = getEnvVar('NODE_ENV');
+  if (nodeEnv === 'production') return true;
+
+  // Check Vite's MODE
+  const mode = getEnvVar('MODE');
+  if (mode === 'production') return true;
+
+  // Check PROD flag (Vite sets this)
+  const prod = getEnvVar('PROD');
+  if (prod === 'true') return true;
+
+  // Browser detection: check if running minified code (heuristic)
+  if (detectBrowser()) {
+    // In production builds, function names are typically minified
+    // This is a fallback heuristic
+    try {
+      const testFn = function namedFunction() { /* test */ };
+      // If function name is preserved, likely development
+      // This heuristic can be overridden by explicit env vars
+      if (testFn.name !== 'namedFunction') return true;
+    } catch {
+      // Ignore
+    }
+  }
+
+  return false;
 }
 
 /**

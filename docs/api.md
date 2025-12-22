@@ -49,6 +49,7 @@ Override with `env` option or individual settings.
 
 ## Table of Contents
 
+- [Global Configuration](#global-configuration)
 - [createLogger](#createlogger)
 - [Log Methods](#log-methods)
 - [Child Loggers](#child-loggers)
@@ -56,6 +57,111 @@ Override with `env` option or individual settings.
 - [Transports](#transports)
 - [Types](#types)
 - [Redacted Keys](#redacted-keys)
+
+---
+
+## Global Configuration
+
+Control all loggers from a single place.
+
+### configure()
+
+Set global options that affect all loggers.
+
+```typescript
+import { configure } from '@nextrush/log';
+
+configure({
+  enabled: true,              // Master switch
+  minLevel: 'warn',           // Override all loggers
+  silent: false,              // Force silent mode
+  env: 'production',          // Environment preset
+  enabledNamespaces: ['api:*'],  // Namespace filtering
+  disabledNamespaces: ['debug:*'],
+  defaults: {                 // Defaults for new loggers
+    pretty: false,
+    redact: true,
+  },
+});
+```
+
+### disableLogging() / enableLogging()
+
+```typescript
+import { disableLogging, enableLogging } from '@nextrush/log';
+
+disableLogging(); // All loggers become no-ops
+enableLogging();  // Re-enable logging
+```
+
+### setGlobalLevel()
+
+```typescript
+import { setGlobalLevel } from '@nextrush/log';
+
+setGlobalLevel('error'); // Only error + fatal globally
+```
+
+### Namespace Filtering
+
+```typescript
+import { enableNamespaces, disableNamespaces, isNamespaceEnabled } from '@nextrush/log';
+
+// Only log from specific modules
+enableNamespaces(['api:*', 'auth:*']);
+
+// Disable verbose modules
+disableNamespaces(['debug:*', 'trace:*']);
+
+// Check if namespace would log
+if (isNamespaceEnabled('api:users')) {
+  // ...
+}
+```
+
+### Global Transports
+
+```typescript
+import { addGlobalTransport, clearGlobalTransports } from '@nextrush/log';
+
+// Add transport for all loggers
+addGlobalTransport((entry) => sendToMonitoring(entry));
+
+// Clear all global transports
+clearGlobalTransports();
+```
+
+### configureFromEnv()
+
+```typescript
+import { configureFromEnv } from '@nextrush/log';
+
+// Read LOG_LEVEL, LOG_ENABLED, LOG_NAMESPACES, NODE_ENV
+configureFromEnv((name) => process.env[name]);
+```
+
+### getGlobalConfig() / resetGlobalConfig()
+
+```typescript
+import { getGlobalConfig, resetGlobalConfig } from '@nextrush/log';
+
+const config = getGlobalConfig();
+console.log(config.enabled, config.minLevel);
+
+resetGlobalConfig(); // Reset to defaults
+```
+
+### onConfigChange()
+
+```typescript
+import { onConfigChange } from '@nextrush/log';
+
+const unsubscribe = onConfigChange(() => {
+  console.log('Config changed!');
+});
+
+unsubscribe(); // Stop listening
+```
 
 ---
 
@@ -458,6 +564,135 @@ const apiTransport = createPredicateTransport(
   (entry) => sendToApiLogs(entry),
   (entry) => entry.context.startsWith('API')
 );
+```
+
+### createRateLimitedTransport
+
+Rate limit logs using token bucket algorithm.
+
+```typescript
+import { createRateLimitedTransport } from '@nextrush/log';
+
+const { transport, getStats, reset } = createRateLimitedTransport(
+  innerTransport: LogTransport,
+  options?: {
+    maxLogsPerSecond?: number;   // Default: 100
+    burstAllowance?: number;     // Default: 50
+    bypassLevels?: LogLevel[];   // Default: ['error', 'fatal']
+    onDrop?: (entry, stats) => void;
+  }
+);
+```
+
+```typescript
+const { transport, getStats } = createRateLimitedTransport(myTransport, {
+  maxLogsPerSecond: 100,
+  burstAllowance: 50,
+  onDrop: (entry, stats) => {
+    console.warn(`Dropped: ${stats.totalDropped}`);
+  },
+});
+
+log.addTransport(transport);
+```
+
+### createNamespaceRateLimitedTransport
+
+Per-namespace rate limiting.
+
+```typescript
+import { createNamespaceRateLimitedTransport } from '@nextrush/log';
+
+const transport = createNamespaceRateLimitedTransport(innerTransport, {
+  'api:*': { maxLogsPerSecond: 100, burstAllowance: 50 },
+  'db:*': { maxLogsPerSecond: 50 },
+  '*': { maxLogsPerSecond: 200 },
+});
+```
+
+---
+
+## Async Context
+
+Automatic context propagation across async boundaries.
+
+### runWithContext
+
+Run a function with async context.
+
+```typescript
+import { runWithContext } from '@nextrush/log';
+
+await runWithContext(
+  context: { correlationId?: string; metadata?: object },
+  callback: () => T | Promise<T>
+): T | Promise<T>
+```
+
+```typescript
+await runWithContext({ correlationId: 'req-123' }, async () => {
+  log.info('Has correlationId automatically');
+  await someAsyncOperation();
+});
+```
+
+### getAsyncContext
+
+Get the current async context.
+
+```typescript
+import { getAsyncContext } from '@nextrush/log';
+
+const ctx = getAsyncContext();
+console.log(ctx?.correlationId);
+console.log(ctx?.metadata);
+```
+
+### getContextCorrelationId
+
+Get just the current correlation ID.
+
+```typescript
+import { getContextCorrelationId } from '@nextrush/log';
+
+const correlationId = getContextCorrelationId();
+```
+
+### getContextMetadata
+
+Get just the current metadata.
+
+```typescript
+import { getContextMetadata } from '@nextrush/log';
+
+const metadata = getContextMetadata();
+```
+
+### isAsyncContextAvailable
+
+Check if AsyncLocalStorage is available.
+
+```typescript
+import { isAsyncContextAvailable } from '@nextrush/log';
+
+if (isAsyncContextAvailable()) {
+  // Use async context
+}
+```
+
+### createContextMiddleware
+
+Create Express/Koa-style middleware.
+
+```typescript
+import { createContextMiddleware } from '@nextrush/log';
+
+const middleware = createContextMiddleware((req) => ({
+  correlationId: req.headers['x-request-id'],
+  metadata: { userId: req.user?.id },
+}));
+
+app.use(middleware);
 ```
 
 ---

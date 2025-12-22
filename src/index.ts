@@ -63,17 +63,32 @@ export type {
 // ============================================================================
 
 export {
+  addGlobalTransport,
+  clearGlobalTransports,
   compareLevels,
+  configure,
+  configureFromEnv,
   createLogger,
+  disableLogging,
+  disableNamespaces,
+  enableLogging,
+  enableNamespaces,
+  getGlobalConfig,
+  isNamespaceEnabled,
   isValidLogLevel,
   LOG_LEVEL_PRIORITY,
   LOG_LEVELS,
   Logger,
   logger,
+  onConfigChange,
   parseLogLevel,
+  resetGlobalConfig,
   scopedLogger,
+  setGlobalLevel,
   shouldLog
 } from './core/index.js';
+
+export type { GlobalLoggerConfig } from './core/index.js';
 
 // ============================================================================
 // Simple Default Export - Easiest DX
@@ -102,8 +117,13 @@ export const log = defaultLogger;
 export {
   createBatchTransport,
   createConsoleTransport,
-  createFilteredTransport,
-  createPredicateTransport
+  createFilteredTransport, createNamespaceRateLimitedTransport, createPredicateTransport,
+  createRateLimitedTransport
+} from './transport/index.js';
+
+export type {
+  NamespaceRateLimits, RateLimitOptions,
+  RateLimitStats
 } from './transport/index.js';
 
 // ============================================================================
@@ -121,10 +141,13 @@ export {
 // ============================================================================
 
 export {
+  containsSensitivePattern,
   DEFAULT_SENSITIVE_KEYS,
   isError,
   mergeSensitiveKeys,
+  redactSensitiveValues,
   safeSerialize,
+  sanitizeContext,
   serializeError,
   shouldRedact
 } from './serializer/index.js';
@@ -137,7 +160,8 @@ export {
   detectRuntime,
   getEnvVar,
   getProcessId,
-  getRuntime
+  getRuntime,
+  isProductionBuild
 } from './runtime/index.js';
 
 // ============================================================================
@@ -149,3 +173,18 @@ export {
   formatTimestamp,
   getTime
 } from './utils/index.js';
+
+// ============================================================================
+// Context Exports (AsyncLocalStorage-based context propagation)
+// ============================================================================
+
+export {
+  createContextMiddleware,
+  getAsyncContext,
+  getContextCorrelationId,
+  getContextMetadata,
+  isAsyncContextAvailable,
+  runWithContext
+} from './context/index.js';
+
+export type { AsyncLogContext } from './context/index.js';

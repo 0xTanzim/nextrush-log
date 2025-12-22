@@ -4,7 +4,7 @@
  */
 
 import type { SerializationOptions } from '../types/index.js';
-import { REDACTED_PLACEHOLDER, shouldRedact } from './redaction.js';
+import { REDACTED_PLACEHOLDER, redactSensitiveValues, shouldRedact } from './redaction.js';
 
 /** Placeholder messages for special cases */
 const PLACEHOLDERS = {
@@ -54,7 +54,13 @@ export function safeSerialize(
 
   // Handle primitives
   if (type === 'string') {
-    const str = value as string;
+    let str = value as string;
+
+    // Apply value-based redaction if enabled
+    if (options.redact) {
+      str = redactSensitiveValues(str);
+    }
+
     if (str.length > maxStringLength) {
       const truncated = str.length - maxStringLength;
       return `${str.slice(0, maxStringLength)}... [truncated ${truncated} chars]`;

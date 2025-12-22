@@ -4,6 +4,7 @@ Real-world usage patterns for `@nextrush/log`.
 
 ## Table of Contents
 
+- [Enterprise Setup (500+ Files)](#enterprise-setup-500-files)
 - [Express.js API](#expressjs-api)
 - [Next.js Application](#nextjs-application)
 - [Microservice](#microservice)
@@ -11,6 +12,138 @@ Real-world usage patterns for `@nextrush/log`.
 - [Worker/Background Jobs](#workerbackground-jobs)
 - [Browser Application](#browser-application)
 - [React Application](#react-application)
+
+---
+
+## Enterprise Setup (500+ Files)
+
+For large applications, set up centralized logging configuration.
+
+### 1. Create Logger Configuration
+
+```typescript
+// src/lib/logger.ts
+import {
+  configure,
+  configureFromEnv,
+  createLogger,
+  addGlobalTransport,
+  enableNamespaces,
+} from '@nextrush/log';
+
+/**
+ * Initialize logging for the entire application.
+ * Call once at app startup.
+ */
+export function initializeLogging() {
+  // Read from environment variables
+  configureFromEnv((name) => process.env[name]);
+
+  // Or configure explicitly
+  configure({
+    enabled: process.env.NODE_ENV !== 'test',
+    minLevel: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
+    env: process.env.NODE_ENV as 'development' | 'production',
+  });
+
+  // In production, only log from important modules
+  if (process.env.NODE_ENV === 'production') {
+    enableNamespaces(['api:*', 'auth:*', 'payments:*', 'critical:*']);
+  }
+
+  // Send errors to monitoring service
+  addGlobalTransport((entry) => {
+    if (entry.level === 'error' || entry.level === 'fatal') {
+      sendToErrorTracking(entry);
+    }
+  });
+}
+
+// Re-export for use across the app
+export { createLogger };
+
+// Pre-configured loggers for common modules
+export const apiLog = createLogger('api');
+export const authLog = createLogger('auth');
+export const dbLog = createLogger('db');
+```
+
+### 2. Initialize at App Start
+
+```typescript
+// src/index.ts
+import { initializeLogging } from './lib/logger';
+
+initializeLogging();
+
+// ... rest of your app
+```
+
+### 3. Use in Any File
+
+```typescript
+// src/features/users/service.ts
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('api:users');
+
+export async function createUser(data: UserData) {
+  log.info('Creating user', { email: data.email });
+  // ...
+}
+```
+
+### 4. Feature-Based Logger Organization
+
+```
+src/
+├── lib/
+│   └── logger.ts              # Central config
+├── features/
+│   ├── users/
+│   │   ├── logger.ts          # const log = createLogger('users')
+│   │   ├── service.ts         # import { log } from './logger'
+│   │   └── routes.ts
+│   ├── orders/
+│   │   ├── logger.ts
+│   │   └── service.ts
+│   └── payments/
+│       ├── logger.ts
+│       └── service.ts
+```
+
+### 5. Debug Mode in Production
+
+```typescript
+// Add to window for debugging
+if (typeof window !== 'undefined') {
+  (window as any).__debug = {
+    enableLogs: () => {
+      import('@nextrush/log').then(({ enableLogging, setGlobalLevel }) => {
+        enableLogging();
+        setGlobalLevel('debug');
+        console.log('✅ Logging enabled');
+      });
+    },
+    disableLogs: () => {
+      import('@nextrush/log').then(({ disableLogging }) => {
+        disableLogging();
+        console.log('❌ Logging disabled');
+      });
+    },
+    showConfig: () => {
+      import('@nextrush/log').then(({ getGlobalConfig }) => {
+        console.log(getGlobalConfig());
+      });
+    },
+  };
+}
+
+// Usage in browser console:
+// __debug.enableLogs()
+// __debug.disableLogs()
+// __debug.showConfig()
+```
 
 ---
 

@@ -87,6 +87,48 @@ const apiTransport = createPredicateTransport(
 log.addTransport(apiTransport);
 ```
 
+## Rate-Limited Transport
+
+Prevent log flooding with token bucket rate limiting:
+
+```typescript
+import { createRateLimitedTransport } from '@nextrush/log';
+
+const { transport, getStats, reset } = createRateLimitedTransport(
+  myTransport,
+  {
+    maxLogsPerSecond: 100,  // Base rate
+    burstAllowance: 50,     // Extra burst capacity
+    bypassLevels: ['error', 'fatal'], // Always allow errors
+    onDrop: (entry, stats) => {
+      console.warn(`Dropped log. Total dropped: ${stats.totalDropped}`);
+    },
+  }
+);
+
+log.addTransport(transport);
+
+// Check stats
+setInterval(() => {
+  const stats = getStats();
+  console.log(`Processed: ${stats.totalProcessed}, Dropped: ${stats.totalDropped}`);
+}, 60000);
+```
+
+### Per-Namespace Rate Limits
+
+```typescript
+import { createNamespaceRateLimitedTransport } from '@nextrush/log';
+
+const transport = createNamespaceRateLimitedTransport(myTransport, {
+  'api:*': { maxLogsPerSecond: 100, burstAllowance: 50 },
+  'db:*': { maxLogsPerSecond: 50 },
+  '*': { maxLogsPerSecond: 200 }, // Default for unmatched
+});
+
+log.addTransport(transport);
+```
+
 ## Multiple Transports
 
 ```typescript

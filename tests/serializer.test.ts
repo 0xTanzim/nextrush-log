@@ -5,12 +5,13 @@
 
 import { describe, expect, it } from 'vitest';
 import {
-  createSerializationOptions,
-  DEFAULT_SENSITIVE_KEYS,
-  mergeSensitiveKeys,
-  safeSerialize,
-  serializeError,
-  shouldRedact,
+    createSerializationOptions,
+    DEFAULT_SENSITIVE_KEYS,
+    isError,
+    mergeSensitiveKeys,
+    safeSerialize,
+    serializeError,
+    shouldRedact,
 } from '../src/serializer/index.js';
 
 describe('safeSerialize', () => {
@@ -266,6 +267,109 @@ describe('serializeError', () => {
 
     expect(result.code).toBe('ERR_API_FAILED');
   });
+
+  it('should serialize error with code property', () => {
+    const error = new Error('Connection failed') as Error & {
+      code: string;
+      errno: number;
+      syscall: string;
+      hostname: string;
+      path: string;
+    };
+    error.code = 'ECONNREFUSED';
+    error.errno = -111;
+    error.syscall = 'connect';
+    error.hostname = 'localhost';
+    error.path = '/tmp/socket';
+
+    const result = serializeError(error, defaultOptions);
+
+    expect(result.code).toBe('ECONNREFUSED');
+    expect(result['errno']).toBe(-111);
+    expect(result['syscall']).toBe('connect');
+    expect(result['hostname']).toBe('localhost');
+    expect(result['path']).toBe('/tmp/socket');
+  });
+
+  it('should serialize error without stack', () => {
+    const error = new Error('No stack');
+    delete error.stack;
+
+    const result = serializeError(error, defaultOptions);
+
+    expect(result.name).toBe('Error');
+    expect(result.message).toBe('No stack');
+    expect(result.stack).toBeUndefined();
+  });
+
+  it('should handle error with non-Error cause', () => {
+    const error = new Error('Wrapper', { cause: 'string cause' });
+    const result = serializeError(error, defaultOptions);
+
+    expect(result.cause).toBe('string cause');
+  });
+
+  it('should handle deeply nested error causes', () => {
+    const options = createSerializationOptions({ maxDepth: 3 });
+
+    const root = new Error('Root');
+    const level1 = new Error('Level 1', { cause: root });
+    const level2 = new Error('Level 2', { cause: level1 });
+    const level3 = new Error('Level 3', { cause: level2 });
+    const level4 = new Error('Level 4', { cause: level3 });
+
+    const result = serializeError(level4, options);
+
+    expect(result.message).toBe('Level 4');
+    expect(result.cause).toBeDefined();
+    const cause = result.cause as Record<string, unknown>;
+    expect(cause['message']).toBe('Level 3');
+  });
+
+  it('should serialize AggregateError', () => {
+    const errors = [
+      new Error('Error 1'),
+      new Error('Error 2'),
+      new TypeError('Type error'),
+    ];
+    const aggError = new AggregateError(errors, 'Multiple errors');
+
+    const result = serializeError(aggError, defaultOptions);
+
+    expect(result.name).toBe('AggregateError');
+    expect(result.message).toBe('Multiple errors');
+    expect(Array.isArray(result['errors'])).toBe(true);
+    expect((result['errors'] as unknown[]).length).toBe(3);
+  });
+
+  it('should truncate AggregateError with more than 10 errors', () => {
+    const errors = Array.from({ length: 15 }, (_, i) => new Error(`Error ${i}`));
+    const aggError = new AggregateError(errors, 'Many errors');
+
+    const result = serializeError(aggError, defaultOptions);
+
+    const serializedErrors = result['errors'] as unknown[];
+    expect(serializedErrors.length).toBe(11); // 10 + 1 truncation message
+    expect(serializedErrors[10]).toBe('[5 more errors]');
+  });
+
+  it('should handle error without name', () => {
+    const error = new Error('No name');
+    Object.defineProperty(error, 'name', { value: '' });
+
+    const result = serializeError(error, defaultOptions);
+
+    expect(result.name).toBe('Error'); // Falls back to 'Error'
+  });
+
+  it('should handle error without message', () => {
+    const error = new Error();
+    Object.defineProperty(error, 'message', { value: '' });
+
+    const result = serializeError(error, defaultOptions);
+
+    expect(result.message).toBe('Unknown error'); // Falls back
+  });
 });
 
 describe('redaction', () => {
@@ -311,5 +415,60 @@ describe('redaction', () => {
     const merged = mergeSensitiveKeys(['customSecret']);
     expect(merged).toContain('password');
     expect(merged).toContain('customSecret');
+  });
+});
+
+describe('isError', () => {
+  it('should return true for Error instances', () => {
+    expect(isError(new Error('test'))).toBe(true);
+    expect(isError(new TypeError('test'))).toBe(true);
+    expect(isError(new RangeError('test'))).toBe(true);
+    expect(isError(new SyntaxError('test'))).toBe(true);
+  });
+
+  it('should return true for error-like objects', () => {
+    const errorLike = {
+      name: 'CustomError',
+      message: 'Something went wrong',
+      stack: 'Error: Something went wrong\n    at Test',
+    };
+    expect(isError(errorLike)).toBe(true);
+  });
+
+  it('should return true for error-like objects without stack', () => {
+    const errorLike = {
+      name: 'CustomError',
+      message: 'Something went wrong',
+    };
+    expect(isError(errorLike)).toBe(true);
+  });
+
+  it('should return false for null', () => {
+    expect(isError(null)).toBe(false);
+  });
+
+  it('should return false for undefined', () => {
+    expect(isError(undefined)).toBe(false);
+  });
+
+  it('should return false for primitives', () => {
+    expect(isError('error')).toBe(false);
+    expect(isError(123)).toBe(false);
+    expect(isError(true)).toBe(false);
+  });
+
+  it('should return false for regular objects', () => {
+    expect(isError({ foo: 'bar' })).toBe(false);
+    expect(isError({ name: 'NotAnError' })).toBe(false);
+    expect(isError({ message: 'Just a message' })).toBe(false);
+  });
+
+  it('should return false for arrays', () => {
+    expect(isError([])).toBe(false);
+    expect(isError(['error'])).toBe(false);
+  });
+
+  it('should return false for functions', () => {
+    expect(isError(() => { /* empty */ })).toBe(false);
   });
 });

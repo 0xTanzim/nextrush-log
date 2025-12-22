@@ -40,16 +40,22 @@ setupErrorCapture(log);
 ### Provider Setup
 
 ```tsx
-import { LogProvider, useLogger } from '@nextrush/log/react';
+import { LoggerProvider, useLogger } from '@nextrush/log/react';
 
 function App() {
   return (
-    <LogProvider
+    <LoggerProvider
       context="MyApp"
       options={{ minLevel: 'debug' }}
+      globalConfig={{
+        // Control all loggers from provider
+        enabled: import.meta.env.PROD,
+        minLevel: import.meta.env.PROD ? 'info' : 'debug',
+        enabledNamespaces: ['*'],
+      }}
     >
       <Router />
-    </LogProvider>
+    </LoggerProvider>
   );
 }
 ```
@@ -73,15 +79,15 @@ function MyComponent() {
 ### Error Boundary
 
 ```tsx
-import { LogErrorBoundary } from '@nextrush/log/react';
+import { LoggerProvider, LogErrorBoundary } from '@nextrush/log/react';
 
 function App() {
   return (
-    <LogProvider context="App">
+    <LoggerProvider context="App">
       <LogErrorBoundary fallback={<ErrorPage />}>
         <Router />
       </LogErrorBoundary>
-    </LogProvider>
+    </LoggerProvider>
   );
 }
 ```

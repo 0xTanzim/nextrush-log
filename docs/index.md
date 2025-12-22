@@ -17,6 +17,9 @@ features:
   - icon: 🌍
     title: Works Everywhere
     details: Node.js, Bun, Deno, browsers, React, Next.js, edge runtimes — one API everywhere.
+  - icon: 🎛️
+    title: Global Control
+    details: Disable all logging with one line. Namespace filtering for 500+ file projects.
   - icon: 🔒
     title: Production Safe
     details: Auto-redacts sensitive data in production. Full visibility in development.
@@ -26,9 +29,6 @@ features:
   - icon: 🎨
     title: Smart Formatting
     details: Pretty output in development, JSON for production log aggregators.
-  - icon: 📊
-    title: Six Log Levels
-    details: trace, debug, info, warn, error, fatal — filter by environment.
   - icon: 🔧
     title: Fully Typed
     details: Complete TypeScript support with full type inference.

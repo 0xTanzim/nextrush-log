@@ -1,6 +1,6 @@
 {
   "name": "@nextrush/log",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Universal, zero-dependency, production-grade logger for modern JavaScript runtimes",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -35,6 +35,26 @@
       "require": {
         "types": "./dist/react.d.cts",
         "default": "./dist/react.cjs"
+      }
+    },
+    "./context": {
+      "import": {
+        "types": "./dist/context.d.ts",
+        "default": "./dist/context.js"
+      },
+      "require": {
+        "types": "./dist/context.d.cts",
+        "default": "./dist/context.cjs"
+      }
+    },
+    "./testing": {
+      "import": {
+        "types": "./dist/testing.d.ts",
+        "default": "./dist/testing.js"
+      },
+      "require": {
+        "types": "./dist/testing.d.cts",
+        "default": "./dist/testing.cjs"
       }
     }
   },

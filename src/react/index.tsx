@@ -21,17 +21,18 @@
 
 import type { ComponentType, ErrorInfo, ReactNode } from 'react';
 import {
-  Component,
-  createContext,
-  createElement,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
+    Component,
+    createContext,
+    createElement,
+    useCallback,
+    useContext,
+    useEffect,
+    useMemo,
+    useRef,
 } from 'react';
 
-import { createLogger, Logger } from '../core/index.js';
+import type { GlobalLoggerConfig } from '../core/index.js';
+import { configure, createLogger, Logger } from '../core/index.js';
 import type { LoggerOptions } from '../types/index.js';
 
 // ============================================================================
@@ -55,6 +56,8 @@ export interface LoggerProviderProps {
   context?: string;
   /** Logger options */
   options?: LoggerOptions;
+  /** Global configuration to apply on mount */
+  globalConfig?: Partial<GlobalLoggerConfig>;
   /** Children */
   children: ReactNode;
 }
@@ -64,14 +67,33 @@ export interface LoggerProviderProps {
  *
  * @example
  * ```tsx
+ * // Basic usage
  * <LoggerProvider context="my-app">
+ *   <App />
+ * </LoggerProvider>
+ *
+ * // With global config (disable all logs in production)
+ * <LoggerProvider
+ *   context="my-app"
+ *   globalConfig={{
+ *     enabled: process.env.NODE_ENV !== 'production',
+ *     minLevel: 'info'
+ *   }}
+ * >
  *   <App />
  * </LoggerProvider>
  * ```
  */
 export function LoggerProvider(props: LoggerProviderProps): ReactNode {
-  const { context = 'app', children } = props;
+  const { context = 'app', children, globalConfig: globalConfigProp } = props;
   const options = props.options;
+
+  // Apply global config on mount
+  const hasAppliedGlobalConfig = useRef(false);
+  if (!hasAppliedGlobalConfig.current && globalConfigProp) {
+    configure(globalConfigProp);
+    hasAppliedGlobalConfig.current = true;
+  }
 
   const loggerRef = useRef<Logger | null>(null);
   const childLoggersRef = useRef(new Map<string, Logger>());
@@ -115,11 +137,20 @@ export function LoggerProvider(props: LoggerProviderProps): ReactNode {
  */
 export function useLogger(context?: string): Logger {
   const ctx = useContext(LoggerContext);
-  const fallbackRef = useRef<Logger | null>(null);
+
+  // Use useMemo to properly recreate logger when context changes
+  const fallbackLogger = useMemo(() => {
+    if (ctx) return null;
+    return createLogger(context ?? 'app');
+  }, [context, ctx]);
+
+  if (!ctx && fallbackLogger) {
+    return fallbackLogger;
+  }
 
   if (!ctx) {
-    fallbackRef.current ??= createLogger(context ?? 'app');
-    return fallbackRef.current;
+    // Safety fallback - should not reach here
+    return createLogger(context ?? 'app');
   }
 
   return context ? ctx.getLogger(context) : ctx.logger;
@@ -247,5 +278,14 @@ export function withLogger<P extends WithLoggerProps>(
 // Re-exports
 // ============================================================================
 
-export { createLogger, Logger } from '../core/index.js';
+export {
+    configure,
+    createLogger,
+    disableLogging,
+    enableLogging,
+    getGlobalConfig,
+    Logger,
+    setGlobalLevel
+} from '../core/index.js';
+export type { GlobalLoggerConfig } from '../core/index.js';
 export type { LogEntry, LoggerOptions, LogLevel } from '../types/index.js';

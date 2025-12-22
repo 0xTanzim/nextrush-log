@@ -2,15 +2,11 @@
 
 Get up and running with `@nextrush/log` in 5 minutes.
 
----
-
 ## Installation
 
 ```bash
 npm install @nextrush/log
 ```
-
----
 
 ## Log Levels at a Glance
 
@@ -26,8 +22,6 @@ Six levels from most verbose to most critical:
 | `fatal` | 60 | Critical failures (app crash, data corruption) |
 
 **Higher priority = more critical.** Setting `minLevel: 'warn'` shows warn, error, and fatal only.
-
----
 
 ## Environment Defaults
 
@@ -48,8 +42,6 @@ The logger auto-detects your environment:
 ```json
 {"level":"debug","message":"User data","data":{"password":"[REDACTED]"}}
 ```
-
----
 
 ## Quick Start
 
@@ -94,11 +86,93 @@ log.fatal('Cannot start', new Error('Port in use'));
 
 Notice: In production, `trace` and `debug` are filtered out by default.
 
----
+## Central Configuration (For Large Apps)
+
+::: tip Key Concept
+Configure logging **ONCE** at app startup. Every other file just uses `createLogger()` - the global config automatically applies!
+:::
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Global Config (Singleton)                 │
+│                                                             │
+│  configure() or disableLogging() ←── Call from ONE place    │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+                              │
+            Automatically affects ALL loggers
+                              │
+        ┌─────────────────────┼─────────────────────┐
+        │                     │                     │
+        ▼                     ▼                     ▼
+   ┌─────────┐          ┌─────────┐          ┌─────────┐
+   │ file1.ts │          │ file2.ts │          │ file3.ts │
+   │ createLogger()      │ createLogger()      │ createLogger()
+   └─────────┘          └─────────┘          └─────────┘
+       ... up to 500+ files - ALL respect global config
+```
+
+### Example: Central Configuration
+
+```typescript
+// ====== src/lib/logger.ts (ONLY config file) ======
+import { configure, createLogger } from '@nextrush/log';
+
+export function initializeLogging() {
+  configure({
+    enabled: process.env.NODE_ENV !== 'test',
+    minLevel: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
+  });
+}
+
+export { createLogger };
+```
+
+```typescript
+// ====== src/index.ts (entry point) ======
+import { initializeLogging } from './lib/logger';
+initializeLogging(); // Call ONCE at startup!
+
+// ... rest of app
+```
+
+```typescript
+// ====== ANY other file (500+ files) ======
+import { createLogger } from '@nextrush/log';
+
+const log = createLogger('users:service');
+log.info('Working!'); // Automatically uses global config!
+```
+
+For complete details, see [Global Configuration](./global-configuration.md).
 
 ## Control What Gets Logged
 
-### Set Minimum Level
+### Disable All Logging (One Line!)
+
+```typescript
+import { disableLogging } from '@nextrush/log';
+
+disableLogging(); // All loggers across all files are now silent
+```
+
+### Enable All Logging
+
+```typescript
+import { enableLogging } from '@nextrush/log';
+
+enableLogging(); // All loggers start logging again
+```
+
+### Set Global Level
+
+```typescript
+import { setGlobalLevel } from '@nextrush/log';
+
+setGlobalLevel('error'); // Only error and fatal across all loggers
+```
+
+### Set Minimum Level per Logger
 
 ```typescript
 // Only warn and above
@@ -135,8 +209,6 @@ if (log.isLevelEnabled('debug')) {
 }
 ```
 
----
-
 ## Override Environment Defaults
 
 ```typescript
@@ -158,8 +230,6 @@ const log = createLogger('App', {
   redact: true,
 });
 ```
-
----
 
 ## Common Patterns
 
@@ -212,8 +282,6 @@ timer.end('Query done', { rows: result.length });
 // "Query done" { duration: 42, rows: 150 }
 ```
 
----
-
 ## Browser & React
 
 Same API works everywhere:
@@ -244,8 +312,6 @@ function MyComponent() {
 }
 ```
 
----
-
 ## Sensitive Data Redaction
 
 In production (`env: 'production'` or `NODE_ENV=production`), sensitive fields are auto-redacted:
@@ -266,10 +332,9 @@ const log = createLogger('App', {
 });
 ```
 
----
-
 ## Next Steps
 
+- [Global Configuration](./global-configuration.md) — Control all loggers from one place
+- [Best Practices](./best-practices.md) — Production patterns for enterprise apps
 - [API Reference](./api.md) — Complete method documentation
 - [Examples](./examples.md) — Express, Next.js, React patterns
-- [Architecture](./architecture.md) — How it works internally

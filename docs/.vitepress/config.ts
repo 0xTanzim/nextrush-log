@@ -24,6 +24,7 @@ export default defineConfig({
           { text: 'Getting Started', link: '/getting-started' },
           { text: 'Log Levels', link: '/log-levels' },
           { text: 'Environment Config', link: '/environment' },
+          { text: 'Global Configuration', link: '/global-configuration' },
         ],
       },
       {
@@ -31,8 +32,11 @@ export default defineConfig({
         items: [
           { text: 'Child Loggers', link: '/child-loggers' },
           { text: 'Request Tracing', link: '/tracing' },
+          { text: 'Async Context', link: '/async-context' },
           { text: 'Custom Transports', link: '/transports' },
           { text: 'Browser & React', link: '/browser-react' },
+          { text: 'Testing', link: '/testing' },
+          { text: 'Best Practices', link: '/best-practices' },
         ],
       },
       {
@@ -41,6 +45,7 @@ export default defineConfig({
           { text: 'API Reference', link: '/api' },
           { text: 'Examples', link: '/examples' },
           { text: 'Architecture', link: '/architecture' },
+          { text: 'FAQ', link: '/faq' },
         ],
       },
     ],

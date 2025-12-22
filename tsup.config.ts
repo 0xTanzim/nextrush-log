@@ -5,6 +5,8 @@ export default defineConfig({
     index: 'src/index.ts',
     browser: 'src/browser/index.ts',
     react: 'src/react/index.tsx',
+    context: 'src/context/index.ts',
+    testing: 'src/testing/index.ts',
   },
   format: ['esm', 'cjs'],
   dts: true,

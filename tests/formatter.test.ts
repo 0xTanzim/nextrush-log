@@ -1,9 +1,10 @@
 /**
  * Formatter tests
- * Tests for JSON and pretty formatters
+ * Tests for JSON, pretty, and browser formatters
  */
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { logBrowser } from '../src/formatter/browser.js';
 import { formatJSON, formatPrettyJSON } from '../src/formatter/json.js';
 import { formatPrettyTerminal } from '../src/formatter/pretty.js';
 import type { LogEntry } from '../src/types/index.js';
@@ -193,5 +194,287 @@ describe('formatPrettyTerminal', () => {
     const result = formatPrettyTerminal(entry, false);
 
     expect(result).toContain('50.00MB');
+  });
+
+  it('should format data with null values', () => {
+    const entry = createMockEntry({
+      data: { value: null },
+    });
+    const result = formatPrettyTerminal(entry, false);
+
+    expect(result).toContain('null');
+  });
+
+  it('should format data with undefined values', () => {
+    const entry = createMockEntry({
+      data: { value: undefined },
+    });
+    const result = formatPrettyTerminal(entry, false);
+
+    expect(result).toContain('undefined');
+  });
+
+  it('should format data with string values', () => {
+    const entry = createMockEntry({
+      data: { name: 'John' },
+    });
+    const result = formatPrettyTerminal(entry, false);
+
+    expect(result).toContain('"John"');
+  });
+
+  it('should format data with number values', () => {
+    const entry = createMockEntry({
+      data: { count: 42 },
+    });
+    const result = formatPrettyTerminal(entry, false);
+
+    expect(result).toContain('42');
+  });
+
+  it('should format data with boolean values', () => {
+    const entry = createMockEntry({
+      data: { active: true },
+    });
+    const result = formatPrettyTerminal(entry, false);
+
+    expect(result).toContain('true');
+  });
+
+  it('should format data with empty array', () => {
+    const entry = createMockEntry({
+      data: { items: [] },
+    });
+    const result = formatPrettyTerminal(entry, false);
+
+    expect(result).toContain('[]');
+  });
+
+  it('should format data with small array', () => {
+    const entry = createMockEntry({
+      data: { items: [1, 2, 3] },
+    });
+    const result = formatPrettyTerminal(entry, false);
+
+    expect(result).toContain('[');
+    expect(result).toContain('1');
+    expect(result).toContain('2');
+    expect(result).toContain('3');
+  });
+
+  it('should format data with large array', () => {
+    const entry = createMockEntry({
+      data: { items: [1, 2, 3, 4, 5] },
+    });
+    const result = formatPrettyTerminal(entry, false);
+
+    expect(result).toContain('[Array: 5 items]');
+  });
+
+  it('should format data with empty object', () => {
+    const entry = createMockEntry({
+      data: { nested: {} },
+    });
+    const result = formatPrettyTerminal(entry, false);
+
+    expect(result).toContain('{}');
+  });
+
+  it('should format data with small object', () => {
+    const entry = createMockEntry({
+      data: { nested: { a: 1, b: 2 } },
+    });
+    const result = formatPrettyTerminal(entry, false);
+
+    expect(result).toContain('a:');
+    expect(result).toContain('b:');
+  });
+
+  it('should format data with large object', () => {
+    const entry = createMockEntry({
+      data: { nested: { a: 1, b: 2, c: 3, d: 4 } },
+    });
+    const result = formatPrettyTerminal(entry, false);
+
+    expect(result).toContain('{Object: 4 keys}');
+  });
+
+  it('should format error with code', () => {
+    const entry = createMockEntry({
+      error: {
+        name: 'SystemError',
+        message: 'Connection refused',
+        code: 'ECONNREFUSED',
+        stack: 'SystemError: Connection refused\n    at connect',
+      },
+    });
+    const result = formatPrettyTerminal(entry, false);
+
+    expect(result).toContain('Code: ECONNREFUSED');
+  });
+
+  it('should format error with cause', () => {
+    const entry = createMockEntry({
+      error: {
+        name: 'WrapperError',
+        message: 'Wrapper',
+        cause: {
+          name: 'RootError',
+          message: 'Root cause',
+        },
+      },
+    });
+    const result = formatPrettyTerminal(entry, false);
+
+    expect(result).toContain('Caused by: RootError - Root cause');
+  });
+
+  it('should format data with colors enabled', () => {
+    const entry = createMockEntry({
+      data: {
+        string: 'hello',
+        number: 42,
+        boolean: true,
+        null: null,
+      },
+    });
+    const result = formatPrettyTerminal(entry, true);
+
+    // Should contain ANSI color codes
+    expect(result).toContain('\x1b[');
+  });
+});
+
+describe('logBrowser', () => {
+  const noop = (): void => { /* empty mock */ };
+
+  beforeEach(() => {
+    vi.spyOn(console, 'info').mockImplementation(noop);
+    vi.spyOn(console, 'debug').mockImplementation(noop);
+    vi.spyOn(console, 'warn').mockImplementation(noop);
+    vi.spyOn(console, 'error').mockImplementation(noop);
+    vi.spyOn(console, 'log').mockImplementation(noop);
+    vi.spyOn(console, 'dir').mockImplementation(noop);
+    vi.spyOn(console, 'groupCollapsed').mockImplementation(noop);
+    vi.spyOn(console, 'groupEnd').mockImplementation(noop);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should log info level to console.info', () => {
+    const entry = createMockEntry({ level: 'info' });
+    logBrowser(entry);
+
+    expect(console.info).toHaveBeenCalled();
+  });
+
+  it('should log debug level to console.debug', () => {
+    const entry = createMockEntry({ level: 'debug' });
+    logBrowser(entry);
+
+    expect(console.debug).toHaveBeenCalled();
+  });
+
+  it('should log trace level to console.debug', () => {
+    const entry = createMockEntry({ level: 'trace' });
+    logBrowser(entry);
+
+    expect(console.debug).toHaveBeenCalled();
+  });
+
+  it('should log warn level to console.warn', () => {
+    const entry = createMockEntry({ level: 'warn' });
+    logBrowser(entry);
+
+    expect(console.warn).toHaveBeenCalled();
+  });
+
+  it('should log error level to console.error', () => {
+    const entry = createMockEntry({ level: 'error' });
+    logBrowser(entry);
+
+    expect(console.error).toHaveBeenCalled();
+  });
+
+  it('should log fatal level to console.error', () => {
+    const entry = createMockEntry({ level: 'fatal' });
+    logBrowser(entry);
+
+    expect(console.error).toHaveBeenCalled();
+  });
+
+  it('should include correlationId in format string', () => {
+    const entry = createMockEntry({
+      correlationId: 'req-abc-123',
+    });
+    logBrowser(entry);
+
+    const call = (console.info as ReturnType<typeof vi.fn>).mock.calls[0];
+    const formatString = call?.[0] as string;
+    expect(formatString).toContain('req-abc-123');
+  });
+
+  it('should log data in collapsed group', () => {
+    const entry = createMockEntry({
+      data: { userId: 123, action: 'click' },
+    });
+    logBrowser(entry);
+
+    expect(console.groupCollapsed).toHaveBeenCalled();
+    expect(console.dir).toHaveBeenCalled();
+    expect(console.groupEnd).toHaveBeenCalled();
+  });
+
+  it('should log error in collapsed group', () => {
+    const mockError = new Error('Test error');
+    const entry = createMockEntry({
+      error: {
+        name: 'Error',
+        message: 'Test error',
+        stack: mockError.stack,
+      },
+    });
+    logBrowser(entry);
+
+    expect(console.groupCollapsed).toHaveBeenCalledTimes(1);
+    const groupCall = (console.groupCollapsed as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(groupCall?.[0]).toContain('Error Details');
+  });
+
+  it('should log performance metrics', () => {
+    const entry = createMockEntry({
+      performance: { duration: 125.5 },
+    });
+    logBrowser(entry);
+
+    expect(console.log).toHaveBeenCalled();
+    const logCall = (console.log as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(logCall?.[0]).toContain('Performance');
+  });
+
+  it('should handle empty data object', () => {
+    const entry = createMockEntry({
+      data: {},
+    });
+    logBrowser(entry);
+
+    // Should not create group for empty data
+    expect(console.groupCollapsed).not.toHaveBeenCalled();
+  });
+
+  it('should handle console method failure gracefully', () => {
+    vi.spyOn(console, 'info').mockImplementation(() => {
+      throw new Error('Console failed');
+    });
+
+    const entry = createMockEntry({ level: 'info' });
+
+    // Should not throw
+    expect(() => logBrowser(entry)).not.toThrow();
+
+    // Should fall back to console.log
+    expect(console.log).toHaveBeenCalled();
   });
 });
