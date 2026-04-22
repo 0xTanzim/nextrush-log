@@ -4,7 +4,7 @@ layout: home
 hero:
   name: '@nextrush/log'
   text: Universal Logger
-  tagline: Simple, safe, zero-dependency logging for modern JavaScript
+  tagline: One API for Node, edge, serverless, browsers, and React — with global singleton config, structured output, and safe redaction.
   actions:
     - theme: brand
       text: Get Started

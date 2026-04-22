@@ -54,13 +54,18 @@ export function getColors(enabled: boolean): typeof ANSI {
   return enabled ? ANSI : (NO_COLORS as typeof ANSI);
 }
 
-/** Browser CSS color styles for console */
+/** Browser CSS color styles for DevTools (light + dark themes) */
 export const BROWSER_COLORS = {
-  trace: 'color: #9e9e9e',
-  debug: 'color: #00bcd4',
-  info: 'color: #4caf50',
-  warn: 'color: #ff9800; font-weight: bold',
-  error: 'color: #f44336; font-weight: bold',
+  trace:
+    'color: #78909c; font-weight: 600; padding: 1px 0',
+  debug:
+    'color: #26c6da; font-weight: 600; padding: 1px 0',
+  info:
+    'color: #66bb6a; font-weight: 600; padding: 1px 0',
+  warn:
+    'color: #ffa726; font-weight: 700; padding: 1px 0',
+  error:
+    'color: #ef5350; font-weight: 700; padding: 1px 0',
   fatal:
-    'color: #fff; background: #f44336; font-weight: bold; padding: 2px 6px; border-radius: 2px',
+    'color: #fff; background: #c62828; font-weight: 700; padding: 3px 8px; border-radius: 4px',
 } as const;

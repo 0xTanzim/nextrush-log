@@ -204,27 +204,18 @@ try {
 
 ## Child Loggers
 
-Use child loggers to add persistent context:
+`child()` takes a **string** segment and optional `LoggerOptions`. For request-scoped fields, combine a child **context** with `withMetadata` (or `withCorrelationId`):
 
 ```typescript
 const baseLog = createLogger('api');
 
-// In a request handler
-function handleRequest(req, res, next) {
-  // Create child with request context
-  const log = baseLog.child({
-    requestId: req.id,
-    userId: req.user?.id,
-    path: req.path,
-  });
+function handleRequest(req: { id: string; user?: { id: string }; path: string }) {
+  const log = baseLog
+    .child(`req:${req.id}`)
+    .withMetadata({ userId: req.user?.id, path: req.path });
 
-  // All logs now include request context
   log.info('Request started');
-
-  // Pass to services
-  await userService.getUser(userId, log);
-
-  log.info('Request completed', { duration: Date.now() - start });
+  log.info('Request completed', { durationMs: 12 });
 }
 ```
 
@@ -263,8 +254,9 @@ Enable redaction to protect sensitive fields:
 ```typescript
 configure({
   defaults: {
-    redact: true,  // Enabled by default
-    redactKeys: ['password', 'token', 'apiKey', 'secret', 'authorization'],
+    redact: true,
+    // Extra key names to redact (merged with built-in list)
+    sensitiveKeys: ['authorization', 'creditCardLast4'],
   },
 });
 
@@ -295,11 +287,11 @@ function getTenantLogger(tenantId: string) {
   return createLogger(`tenant:${tenantId}`);
 }
 
-// In middleware
+// In middleware (attach a logger with string child + metadata)
 app.use((req, res, next) => {
-  req.log = getTenantLogger(req.tenantId).child({
-    requestId: req.id,
-  });
+  req.log = getTenantLogger(req.tenantId)
+    .child(`req:${req.id}`)
+    .withMetadata({ requestId: req.id });
   next();
 });
 ```

@@ -17,6 +17,26 @@ const LEVEL_ICONS: Record<LogLevel, string> = {
 };
 
 /**
+ * Compact, readable browser output when pretty mode is off (e.g. production JSON still hard to read).
+ * One line per log + structured data / errors on follow-up lines.
+ */
+export function logBrowserCompact(entry: LogEntry): void {
+  const levelLabel = entry.level.toUpperCase();
+  const line = `[${levelLabel}] [${entry.context}]${entry.correlationId ? ` (${entry.correlationId})` : ''} ${entry.message}`;
+  const logFn = getConsoleMethod(entry.level);
+  logFn(line);
+  if (entry.data && Object.keys(entry.data).length > 0) {
+    logFn('data:', entry.data);
+  }
+  if (entry.error) {
+    console.error('error:', entry.error);
+  }
+  if (entry.performance) {
+    console.log('performance:', entry.performance);
+  }
+}
+
+/**
  * Log an entry to the browser console with CSS styling
  */
 export function logBrowser(entry: LogEntry): void {
@@ -81,8 +101,9 @@ export function logBrowser(entry: LogEntry): void {
  */
 function getConsoleMethod(level: LogLevel): (...args: unknown[]) => void {
   switch (level) {
+    // `trace` uses log so it still appears when DevTools default level is "Info" (debug is often hidden)
     case 'trace':
-      return console.debug.bind(console);
+      return console.log.bind(console);
     case 'debug':
       return console.debug.bind(console);
     case 'info':

@@ -46,6 +46,11 @@ const log = createLogger('Component2');
 // ... 498 more files
 ```
 
+## Global vs per-logger `silent`
+
+- **`configure({ silent: true })`**: entries are **not** written at all (no console, no transports) while enabled.
+- **`createLogger({ silent: true })`**: skips **console** only; **transports** (instance + global) still run. Use that when you want external sinks without stdout noise.
+
 ## The Solution
 
 **Global configuration** lets you control ALL loggers from one place:
@@ -178,7 +183,7 @@ enableLogging(); // All loggers start logging again
 
 ```typescript
 import { setGlobalLevel } from '@nextrush/log';
-setGlobalLevel('error'); // Only error + fatal across ALL loggers
+setGlobalLevel('error'); // Global floor — stricter per-logger minLevel still wins
 ```
 
 ### Full Configuration
@@ -186,10 +191,10 @@ setGlobalLevel('error'); // Only error + fatal across ALL loggers
 ```typescript
 import { configure } from '@nextrush/log';
 
-configure({
-  enabled: true,                    // Master switch
-  minLevel: 'warn',                 // Override all loggers
-  silent: false,                    // Force silent mode
+  configure({
+    enabled: true,                    // Master switch
+    minLevel: 'warn',                 // Global floor (stricter vs each logger wins)
+    silent: false,                    // Global silent: no output when true
   env: 'production',                // Environment preset
   enabledNamespaces: ['api:*'],     // Only these namespaces log
   disabledNamespaces: ['debug:*'],  // These namespaces don't log
@@ -247,16 +252,21 @@ addGlobalTransport((entry) => {
 ```typescript
 import { configureFromEnv } from '@nextrush/log';
 
-// Reads LOG_LEVEL, LOG_ENABLED, LOG_NAMESPACES, NODE_ENV
-configureFromEnv((name) => process.env[name]);
+// Reads LOG_* and NEXT_PUBLIC_* / VITE_* aliases, plus NODE_ENV
+import { configureFromEnv, getEnvVar } from '@nextrush/log';
+configureFromEnv(getEnvVar);
 ```
 
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `LOG_LEVEL` | Minimum log level | `warn` |
+| `NEXT_PUBLIC_LOG_LEVEL` / `VITE_LOG_LEVEL` | Same, for client / Vite bundles | `error` |
 | `LOG_ENABLED` | Enable/disable all logging | `false` |
+| `NEXT_PUBLIC_LOG_ENABLED` / `VITE_LOG_ENABLED` | Same, for client bundles | `0` |
 | `LOG_NAMESPACES` | Comma-separated patterns | `api:*,auth:*` |
-| `NODE_ENV` | Environment preset | `production` |
+| `NODE_ENV` | `production` / `test` adjust `configureFromEnv` defaults | `production` |
+
+When `NODE_ENV=test`, `configureFromEnv` sets `defaults.silent` when unset (quieter tests).
 
 ## Complete Example
 

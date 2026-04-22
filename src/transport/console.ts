@@ -3,7 +3,7 @@
  * Outputs log entries to the console with appropriate formatting
  */
 
-import { logBrowser } from '../formatter/browser.js';
+import { logBrowser, logBrowserCompact } from '../formatter/browser.js';
 import { formatJSON } from '../formatter/json.js';
 import { formatPrettyTerminal } from '../formatter/pretty.js';
 import { getRuntime } from '../runtime/index.js';
@@ -39,9 +39,12 @@ export function outputToConsole(
   colors: boolean,
   isBrowser: boolean,
 ): void {
-  // Browser: use CSS styling
-  if (isBrowser && pretty) {
-    logBrowser(entry);
+  if (isBrowser) {
+    if (pretty) {
+      logBrowser(entry);
+      return;
+    }
+    logBrowserCompact(entry);
     return;
   }
 
@@ -61,6 +64,7 @@ export function outputToConsole(
 function getConsoleMethod(level: LogLevel): (message: string) => void {
   switch (level) {
     case 'trace':
+      return console.log.bind(console);
     case 'debug':
       return console.debug.bind(console);
     case 'info':

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://0xtanzim.github.io/nextrush-log/</loc><changefreq>weekly</changefreq><priority>1</priority></url>
+  <url><loc>https://0xtanzim.github.io/nextrush-log/getting-started.html</loc><changefreq>weekly</changefreq><priority>0.95</priority></url>
+  <url><loc>https://0xtanzim.github.io/nextrush-log/log-levels.html</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://0xtanzim.github.io/nextrush-log/environment.html</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://0xtanzim.github.io/nextrush-log/global-configuration.html</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://0xtanzim.github.io/nextrush-log/child-loggers.html</loc><changefreq>monthly</changefreq><priority>0.75</priority></url>
+  <url><loc>https://0xtanzim.github.io/nextrush-log/tracing.html</loc><changefreq>monthly</changefreq><priority>0.75</priority></url>
+  <url><loc>https://0xtanzim.github.io/nextrush-log/async-context.html</loc><changefreq>monthly</changefreq><priority>0.75</priority></url>
+  <url><loc>https://0xtanzim.github.io/nextrush-log/transports.html</loc><changefreq>monthly</changefreq><priority>0.75</priority></url>
+  <url><loc>https://0xtanzim.github.io/nextrush-log/browser-react.html</loc><changefreq>monthly</changefreq><priority>0.85</priority></url>
+  <url><loc>https://0xtanzim.github.io/nextrush-log/testing.html</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://0xtanzim.github.io/nextrush-log/best-practices.html</loc><changefreq>monthly</changefreq><priority>0.75</priority></url>
+  <url><loc>https://0xtanzim.github.io/nextrush-log/api.html</loc><changefreq>weekly</changefreq><priority>0.95</priority></url>
+  <url><loc>https://0xtanzim.github.io/nextrush-log/examples.html</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://0xtanzim.github.io/nextrush-log/architecture.html</loc><changefreq>monthly</changefreq><priority>0.65</priority></url>
+  <url><loc>https://0xtanzim.github.io/nextrush-log/faq.html</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+</urlset>

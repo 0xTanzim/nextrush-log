@@ -4,7 +4,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { logBrowser } from '../src/formatter/browser.js';
+import { logBrowser, logBrowserCompact } from '../src/formatter/browser.js';
 import { formatJSON, formatPrettyJSON } from '../src/formatter/json.js';
 import { formatPrettyTerminal } from '../src/formatter/pretty.js';
 import type { LogEntry } from '../src/types/index.js';
@@ -377,11 +377,11 @@ describe('logBrowser', () => {
     expect(console.debug).toHaveBeenCalled();
   });
 
-  it('should log trace level to console.debug', () => {
+  it('should log trace level to console.log', () => {
     const entry = createMockEntry({ level: 'trace' });
     logBrowser(entry);
 
-    expect(console.debug).toHaveBeenCalled();
+    expect(console.log).toHaveBeenCalled();
   });
 
   it('should log warn level to console.warn', () => {
@@ -429,12 +429,15 @@ describe('logBrowser', () => {
 
   it('should log error in collapsed group', () => {
     const mockError = new Error('Test error');
+    const errPayload: { name: string; message: string; stack?: string } = {
+      name: 'Error',
+      message: 'Test error',
+    };
+    if (mockError.stack !== undefined) {
+      errPayload.stack = mockError.stack;
+    }
     const entry = createMockEntry({
-      error: {
-        name: 'Error',
-        message: 'Test error',
-        stack: mockError.stack,
-      },
+      error: errPayload,
     });
     logBrowser(entry);
 
@@ -472,9 +475,50 @@ describe('logBrowser', () => {
     const entry = createMockEntry({ level: 'info' });
 
     // Should not throw
-    expect(() => logBrowser(entry)).not.toThrow();
+    expect(() => {
+      logBrowser(entry);
+    }).not.toThrow();
 
     // Should fall back to console.log
     expect(console.log).toHaveBeenCalled();
+  });
+});
+
+describe('logBrowserCompact', () => {
+  const noop = (): void => { /* empty mock */ };
+
+  beforeEach(() => {
+    vi.spyOn(console, 'info').mockImplementation(noop);
+    vi.spyOn(console, 'error').mockImplementation(noop);
+    vi.spyOn(console, 'log').mockImplementation(noop);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should log a one-line message with level and context', () => {
+    const entry = createMockEntry({
+      level: 'info',
+      context: 'app',
+      message: 'ready',
+    });
+    logBrowserCompact(entry);
+    const line = (console.info as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as
+      | string
+      | undefined;
+    expect(line).toMatch(/INFO/);
+    expect(line).toMatch(/app/);
+    expect(line).toMatch(/ready/);
+  });
+
+  it('should print data and errors as extra lines', () => {
+    const entry = createMockEntry({
+      data: { x: 1 },
+      error: { name: 'E', message: 'bad' },
+    });
+    logBrowserCompact(entry);
+    expect(console.info).toHaveBeenCalled();
+    expect(console.error).toHaveBeenCalled();
   });
 });

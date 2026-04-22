@@ -10,18 +10,17 @@ npm install @nextrush/log
 
 ## Log Levels at a Glance
 
-Six levels from most verbose to most critical:
+Six levels from most verbose to most critical (internal priority **0–5** — see [API](/api#log-levels)):
 
-| Level | Priority | When to Use |
-|-------|:--------:|-------------|
-| `trace` | 10 | Detailed debugging (function entry/exit, variable values) |
-| `debug` | 20 | Development debugging (request details, state changes) |
-| `info` | 30 | Normal operations (server started, user logged in) |
-| `warn` | 40 | Potential issues (deprecated API, high memory) |
-| `error` | 50 | Errors (failed request, caught exception) |
-| `fatal` | 60 | Critical failures (app crash, data corruption) |
+| Level | When to Use |
+|-------|-------------|
+| `trace` | Very chatty diagnostics |
+| `debug` | Development detail |
+| `info` | Normal operations |
+| `warn` | Something wrong but recoverable |
+| `error` / `fatal` | Failures |
 
-**Higher priority = more critical.** Setting `minLevel: 'warn'` shows warn, error, and fatal only.
+Setting `minLevel: 'warn'` shows **warn, error, and fatal** only. Global `configure({ minLevel })` is a **floor**: the **stricter** of the global floor and each logger’s `minLevel` wins — see [Global configuration](/global-configuration).
 
 ## Environment Defaults
 
@@ -169,7 +168,7 @@ enableLogging(); // All loggers start logging again
 ```typescript
 import { setGlobalLevel } from '@nextrush/log';
 
-setGlobalLevel('error'); // Only error and fatal across all loggers
+setGlobalLevel('error'); // Global floor: only error + fatal unless a logger is stricter
 ```
 
 ### Set Minimum Level per Logger
@@ -184,16 +183,9 @@ log.warn('Logged');    // ✅ Logged
 log.error('Logged');   // ✅ Logged
 ```
 
-### Level Filtering Table
+### Level filtering matrix
 
-| `minLevel` | trace | debug | info | warn | error | fatal |
-|------------|:-----:|:-----:|:----:|:----:|:-----:|:-----:|
-| `'trace'`  |  ✅   |  ✅   |  ✅  |  ✅  |  ✅   |  ✅   |
-| `'debug'`  |  ❌   |  ✅   |  ✅  |  ✅  |  ✅   |  ✅   |
-| `'info'`   |  ❌   |  ❌   |  ✅  |  ✅  |  ✅   |  ✅   |
-| `'warn'`   |  ❌   |  ❌   |  ❌  |  ✅  |  ✅   |  ✅   |
-| `'error'`  |  ❌   |  ❌   |  ❌  |  ❌  |  ✅   |  ✅   |
-| `'fatal'`  |  ❌   |  ❌   |  ❌  |  ❌  |  ❌   |  ✅   |
+See [Log levels](/log-levels#matrix) (same table as the API reference).
 
 ### Change Level at Runtime
 
@@ -275,11 +267,12 @@ log.info('Started');
 
 ### Measure Performance
 
+`timer.end()` emits a **debug**-level entry; it appears only if debug is allowed for that logger.
+
 ```typescript
 const timer = log.time('db-query');
 const result = await db.query('SELECT * FROM users');
 timer.end('Query done', { rows: result.length });
-// "Query done" { duration: 42, rows: 150 }
 ```
 
 ## Browser & React
@@ -296,13 +289,13 @@ log.info('Works in browser!');
 ### React Integration
 
 ```tsx
-import { LogProvider, useLogger } from '@nextrush/log/react';
+import { LoggerProvider, useLogger } from '@nextrush/log/react';
 
 function App() {
   return (
-    <LogProvider context="MyApp" options={{ minLevel: 'debug' }}>
+    <LoggerProvider context="MyApp" options={{ minLevel: 'debug' }}>
       <MyComponent />
-    </LogProvider>
+    </LoggerProvider>
   );
 }
 
@@ -311,6 +304,8 @@ function MyComponent() {
   return <button onClick={() => log.info('Clicked!')}>Click</button>;
 }
 ```
+
+`LoggerProvider` applies `globalConfig` with **`configure` in a `useEffect`**, so the singleton updates after the component mounts. See [Browser & React](/browser-react).
 
 ## Sensitive Data Redaction
 

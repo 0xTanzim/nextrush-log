@@ -1,0 +1,5 @@
+# https://github.com/0xTanzim/nextrush-log
+User-agent: *
+Allow: /
+
+Sitemap: https://0xtanzim.github.io/nextrush-log/sitemap.xml

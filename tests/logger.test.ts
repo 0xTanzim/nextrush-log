@@ -15,6 +15,7 @@ import {
     parseLogLevel,
     scopedLogger,
     shouldLog,
+    stricterMinLevel,
 } from '../src/core/index.js';
 import type { LogEntry, LogTransport } from '../src/types/index.js';
 
@@ -25,6 +26,7 @@ describe('Logger', () => {
 
   beforeEach(() => {
     consoleSpy = vi.spyOn(console, 'info').mockImplementation(noop);
+    vi.spyOn(console, 'log').mockImplementation(noop);
     vi.spyOn(console, 'debug').mockImplementation(noop);
     vi.spyOn(console, 'warn').mockImplementation(noop);
     vi.spyOn(console, 'error').mockImplementation(noop);
@@ -99,7 +101,8 @@ describe('Logger', () => {
       log.error('Error');
       log.fatal('Fatal');
 
-      expect(console.debug).toHaveBeenCalledTimes(2); // trace and debug
+      expect(console.log).toHaveBeenCalledTimes(1); // trace
+      expect(console.debug).toHaveBeenCalledTimes(1); // debug
       expect(console.info).toHaveBeenCalledTimes(1);
       expect(console.warn).toHaveBeenCalledTimes(1);
       expect(console.error).toHaveBeenCalledTimes(2); // error and fatal
@@ -373,6 +376,14 @@ describe('log level utilities', () => {
       expect(shouldLog('debug', 'info')).toBe(false);
       expect(shouldLog('info', 'warn')).toBe(false);
       expect(shouldLog('trace', 'error')).toBe(false);
+    });
+  });
+
+  describe('stricterMinLevel', () => {
+    it('should pick the more restrictive minimum', () => {
+      expect(stricterMinLevel('warn', 'error')).toBe('error');
+      expect(stricterMinLevel('error', 'warn')).toBe('error');
+      expect(stricterMinLevel('trace', 'info')).toBe('info');
     });
   });
 

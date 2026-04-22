@@ -58,9 +58,10 @@ Use the built-in middleware factory:
 
 ```typescript
 import express from 'express';
-import { createContextMiddleware } from '@nextrush/log';
+import { createContextMiddleware, createLogger } from '@nextrush/log';
 
 const app = express();
+const log = createLogger('api');
 
 app.use(createContextMiddleware((req) => ({
   correlationId: req.headers['x-request-id'] || crypto.randomUUID(),
@@ -169,7 +170,7 @@ app.use(middleware);
 
 | Runtime | Support |
 |---------|---------|
-| Node.js 16+ | ✅ Full (AsyncLocalStorage) |
+| Node.js 18+ | ✅ Full (AsyncLocalStorage) |
 | Bun | ✅ Full (AsyncLocalStorage) |
 | Deno | ✅ Full (AsyncLocalStorage) |
 | Browser | ⚠️ Fallback (single context) |

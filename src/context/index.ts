@@ -25,11 +25,11 @@ export interface AsyncLogContext {
 }
 
 // Type for AsyncLocalStorage - we check at runtime if available
-type AsyncLocalStorageType<T> = {
+interface AsyncLocalStorageType<T> {
   getStore(): T | undefined;
   run<R>(store: T, callback: () => R): R;
   enterWith(store: T): void;
-};
+}
 
 /** Singleton AsyncLocalStorage instance (Node.js only) */
 let asyncLocalStorage: AsyncLocalStorageType<AsyncLogContext> | null = null;
@@ -45,13 +45,13 @@ function getAsyncLocalStorage(): AsyncLocalStorageType<AsyncLogContext> | null {
   if (asyncLocalStorage !== null) return asyncLocalStorage;
 
   try {
-    // Dynamic import for Node.js async_hooks
+    // CJS only; unavailable in edge/browser bundles (caught).
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const asyncHooks = require('node:async_hooks');
-    if (asyncHooks?.AsyncLocalStorage) {
-      asyncLocalStorage = new asyncHooks.AsyncLocalStorage() as AsyncLocalStorageType<AsyncLogContext>;
-      return asyncLocalStorage;
-    }
+    const asyncHooks = require('node:async_hooks') as {
+      AsyncLocalStorage: new () => AsyncLocalStorageType<AsyncLogContext>;
+    };
+    asyncLocalStorage = new asyncHooks.AsyncLocalStorage();
+    return asyncLocalStorage;
   } catch {
     // AsyncLocalStorage not available (browser, edge, etc.)
   }
@@ -169,12 +169,12 @@ export function isAsyncContextAvailable(): boolean {
  * })));
  * ```
  */
-export function createContextMiddleware<TReq = unknown, TRes = unknown>(
+export function createContextMiddleware<TReq = unknown>(
   getContext: (req: TReq) => AsyncLogContext,
-): (req: TReq, res: TRes, next: () => void) => void {
-  return (req: TReq, _res: TRes, next: () => void) => {
+): (req: TReq, res: unknown, next: () => void) => void {
+  return (req: TReq, _res: unknown, next: () => void) => {
     const context = getContext(req);
-    runWithContext(context, () => {
+    void runWithContext(context, () => {
       next();
     });
   };

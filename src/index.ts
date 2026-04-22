@@ -43,19 +43,19 @@
 // ============================================================================
 
 export type {
-  BatchTransport,
-  BatchTransportOptions,
-  ILogger,
-  LogContext,
-  LogEntry,
-  LoggerOptions,
-  LogLevel,
-  LogTransport,
-  PerformanceMetrics,
-  RuntimeEnvironment,
-  RuntimeInfo,
-  SerializedError,
-  Timer
+    BatchTransport,
+    BatchTransportOptions,
+    ILogger,
+    LogContext,
+    LogEntry,
+    LoggerOptions,
+    LogLevel,
+    LogTransport,
+    PerformanceMetrics,
+    RuntimeEnvironment,
+    RuntimeInfo,
+    SerializedError,
+    Timer
 } from './types/index.js';
 
 // ============================================================================
@@ -63,29 +63,31 @@ export type {
 // ============================================================================
 
 export {
-  addGlobalTransport,
-  clearGlobalTransports,
-  compareLevels,
-  configure,
-  configureFromEnv,
-  createLogger,
-  disableLogging,
-  disableNamespaces,
-  enableLogging,
-  enableNamespaces,
-  getGlobalConfig,
-  isNamespaceEnabled,
-  isValidLogLevel,
-  LOG_LEVEL_PRIORITY,
-  LOG_LEVELS,
-  Logger,
-  logger,
-  onConfigChange,
-  parseLogLevel,
-  resetGlobalConfig,
-  scopedLogger,
-  setGlobalLevel,
-  shouldLog
+    addGlobalTransport,
+    clearGlobalLevel,
+    clearGlobalTransports,
+    compareLevels,
+    configure,
+    configureFromEnv,
+    createLogger,
+    disableLogging,
+    disableNamespaces,
+    enableLogging,
+    enableNamespaces,
+    getGlobalConfig,
+    isNamespaceEnabled,
+    isValidLogLevel,
+    LOG_LEVEL_PRIORITY,
+    LOG_LEVELS,
+    Logger,
+    logger,
+    onConfigChange,
+    parseLogLevel,
+    resetGlobalConfig,
+    scopedLogger,
+    setGlobalLevel,
+    shouldLog,
+    stricterMinLevel
 } from './core/index.js';
 
 export type { GlobalLoggerConfig } from './core/index.js';
@@ -115,15 +117,15 @@ export const log = defaultLogger;
 // ============================================================================
 
 export {
-  createBatchTransport,
-  createConsoleTransport,
-  createFilteredTransport, createNamespaceRateLimitedTransport, createPredicateTransport,
-  createRateLimitedTransport
+    createBatchTransport,
+    createConsoleTransport,
+    createFilteredTransport, createNamespaceRateLimitedTransport, createPredicateTransport,
+    createRateLimitedTransport
 } from './transport/index.js';
 
 export type {
-  NamespaceRateLimits, RateLimitOptions,
-  RateLimitStats
+    NamespaceRateLimits, RateLimitOptions,
+    RateLimitStats
 } from './transport/index.js';
 
 // ============================================================================
@@ -131,9 +133,9 @@ export type {
 // ============================================================================
 
 export {
-  formatJSON,
-  formatPrettyJSON,
-  formatPrettyTerminal
+    formatJSON,
+    formatPrettyJSON,
+    formatPrettyTerminal
 } from './formatter/index.js';
 
 // ============================================================================
@@ -141,15 +143,15 @@ export {
 // ============================================================================
 
 export {
-  containsSensitivePattern,
-  DEFAULT_SENSITIVE_KEYS,
-  isError,
-  mergeSensitiveKeys,
-  redactSensitiveValues,
-  safeSerialize,
-  sanitizeContext,
-  serializeError,
-  shouldRedact
+    containsSensitivePattern,
+    DEFAULT_SENSITIVE_KEYS,
+    isError,
+    mergeSensitiveKeys,
+    redactSensitiveValues,
+    safeSerialize,
+    sanitizeContext,
+    serializeError,
+    shouldRedact
 } from './serializer/index.js';
 
 // ============================================================================
@@ -157,11 +159,11 @@ export {
 // ============================================================================
 
 export {
-  detectRuntime,
-  getEnvVar,
-  getProcessId,
-  getRuntime,
-  isProductionBuild
+    detectRuntime,
+    getEnvVar,
+    getProcessId,
+    getRuntime,
+    isProductionBuild
 } from './runtime/index.js';
 
 // ============================================================================
@@ -169,9 +171,9 @@ export {
 // ============================================================================
 
 export {
-  formatPrettyTimestamp,
-  formatTimestamp,
-  getTime
+    formatPrettyTimestamp,
+    formatTimestamp,
+    getTime
 } from './utils/index.js';
 
 // ============================================================================
@@ -179,12 +181,12 @@ export {
 // ============================================================================
 
 export {
-  createContextMiddleware,
-  getAsyncContext,
-  getContextCorrelationId,
-  getContextMetadata,
-  isAsyncContextAvailable,
-  runWithContext
+    createContextMiddleware,
+    getAsyncContext,
+    getContextCorrelationId,
+    getContextMetadata,
+    isAsyncContextAvailable,
+    runWithContext
 } from './context/index.js';
 
 export type { AsyncLogContext } from './context/index.js';

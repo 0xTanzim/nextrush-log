@@ -90,9 +90,12 @@ const log = createLogger('App', {
 | Variable | Description |
 |----------|-------------|
 | `NODE_ENV` | `'production'` enables JSON output and redaction |
-| `LOG_LEVEL` | Set minimum log level (`trace`, `debug`, `info`, `warn`, `error`, `fatal`) |
+| `LOG_LEVEL` | Set minimum log level (`trace` … `fatal`) |
 | `LOG_ENABLED` | `'false'` or `'0'` disables all logging |
 | `LOG_NAMESPACES` | Comma-separated namespace patterns (`api:*,auth:*`) |
+| `NEXT_PUBLIC_LOG_LEVEL` | Same as `LOG_LEVEL` when using Next.js **client** env |
+| `NEXT_PUBLIC_LOG_ENABLED` / `VITE_LOG_ENABLED` | Same idea for enable/disable in browser bundles |
+| `VITE_LOG_LEVEL` | Vite / client-side alias for `LOG_LEVEL` |
 | `DEBUG` | `'true'` enables debug level in production |
 | `ENABLE_DEBUG_LOGS` | Alternative to `DEBUG` |
 | `NO_COLOR` | Disable colored output |
@@ -100,20 +103,23 @@ const log = createLogger('App', {
 
 ## Configure from Environment
 
-Use `configureFromEnv()` to automatically read environment variables:
+`configureFromEnv` reads the table above. Pass **`getEnvVar`** in Node/Bun and anywhere `getEnvVar` can resolve names (it also consults `import.meta.env` when your bundler defines it):
+
+```typescript
+import { configureFromEnv, getEnvVar } from '@nextrush/log';
+
+configureFromEnv(getEnvVar);
+```
+
+For **Deno** explicitly:
 
 ```typescript
 import { configureFromEnv } from '@nextrush/log';
 
-// Node.js / Bun
-configureFromEnv((name) => process.env[name]);
-
-// Vite
-configureFromEnv((name) => import.meta.env[name] ?? import.meta.env[`VITE_${name}`]);
-
-// Deno
 configureFromEnv((name) => Deno.env.get(name));
 ```
+
+When `NODE_ENV === 'test'`, `configureFromEnv` sets `defaults.silent` to `true` if you have not set it (quieter test runs).
 
 ### Example .env Files
 

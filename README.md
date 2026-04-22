@@ -60,7 +60,7 @@ log.error('Failed', new Error('timeout'));
 
 **Production** — JSON for log aggregators (Datadog, CloudWatch, etc.):
 ```json
-{"timestamp":"2024-01-15T10:30:00.000Z","level":"info","context":"MyApp","message":"Server started","data":{"port":3000}}
+{"timestamp":"2025-01-15T10:30:00.000Z","level":"info","context":"MyApp","message":"Server started","data":{"port":3000}}
 ```
 
 ---

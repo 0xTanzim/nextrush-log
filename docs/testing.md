@@ -43,6 +43,8 @@ mockLog.error('Something failed', new Error('Oops'));
 mockLog.debug('Debug info', { userId: 123 });
 ```
 
+The mock’s `withCorrelationId` / `withMetadata` return the same instance (no chained metadata). Use a **real** `Logger` in integration tests if you need those behaviors.
+
 ### Accessing Recorded Calls
 
 ```typescript

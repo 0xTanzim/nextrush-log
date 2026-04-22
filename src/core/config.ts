@@ -10,7 +10,10 @@ import type { LoggerOptions, LogLevel, LogTransport } from '../types/index.js';
 export interface GlobalLoggerConfig {
   /** Global enable/disable all logging */
   enabled: boolean;
-  /** Global minimum log level (overrides individual loggers) */
+  /**
+   * Global minimum level floor: combined with each logger’s level by taking the **stricter**
+   * of the two (e.g. global `trace` + instance `error` → only `error` and above).
+   */
   minLevel?: LogLevel;
   /** Force silent mode globally */
   silent: boolean;
@@ -36,7 +39,7 @@ const DEFAULT_CONFIG: GlobalLoggerConfig = {
 };
 
 let globalConfig: GlobalLoggerConfig = { ...DEFAULT_CONFIG };
-const configChangeListeners: Set<() => void> = new Set();
+const configChangeListeners = new Set<() => void>();
 
 /**
  * Configure global logger settings
@@ -56,7 +59,11 @@ const configChangeListeners: Set<() => void> = new Set();
  * ```
  */
 export function configure(options: Partial<GlobalLoggerConfig>): void {
-  globalConfig = { ...globalConfig, ...options };
+  const next: GlobalLoggerConfig = { ...globalConfig, ...options };
+  if (options.defaults !== undefined) {
+    next.defaults = { ...globalConfig.defaults, ...options.defaults };
+  }
+  globalConfig = next;
   notifyConfigChange();
 }
 
@@ -70,8 +77,30 @@ export function getGlobalConfig(): Readonly<GlobalLoggerConfig> {
 /**
  * Reset global configuration to defaults
  */
+/**
+ * Reset global configuration to factory defaults.
+ * Uses fresh arrays/objects so a previous session cannot mutate shared state.
+ */
 export function resetGlobalConfig(): void {
-  globalConfig = { ...DEFAULT_CONFIG };
+  globalConfig = {
+    enabled: DEFAULT_CONFIG.enabled,
+    silent: DEFAULT_CONFIG.silent,
+    transports: [],
+    enabledNamespaces: ['*'],
+    disabledNamespaces: [],
+    defaults: {},
+  };
+  notifyConfigChange();
+}
+
+/**
+ * Remove the global `minLevel` floor (same as it being unset from initial state).
+ * Per-logger and `defaults.minLevel` apply again.
+ */
+export function clearGlobalLevel(): void {
+  if ('minLevel' in globalConfig) {
+    delete globalConfig.minLevel;
+  }
   notifyConfigChange();
 }
 
@@ -248,12 +277,18 @@ function notifyConfigChange(): void {
 
 /**
  * Auto-configure from environment
- * Reads LOG_LEVEL, LOG_ENABLED, LOG_NAMESPACES from environment
+ * Reads `LOG_*` (and `NEXT_PUBLIC_*` / `VITE_*` aliases) plus `NODE_ENV`.
  */
 export function configureFromEnv(getEnv: (name: string) => string | undefined): void {
-  const logLevel = getEnv('LOG_LEVEL');
-  const logEnabled = getEnv('LOG_ENABLED');
-  const logNamespaces = getEnv('LOG_NAMESPACES');
+  const logLevel =
+    getEnv('LOG_LEVEL') ??
+    getEnv('NEXT_PUBLIC_LOG_LEVEL') ??
+    getEnv('VITE_LOG_LEVEL');
+  const logEnabled =
+    getEnv('LOG_ENABLED') ??
+    getEnv('NEXT_PUBLIC_LOG_ENABLED') ??
+    getEnv('VITE_LOG_ENABLED');
+  const logNamespaces = getEnv('LOG_NAMESPACES') ?? getEnv('NEXT_PUBLIC_LOG_NAMESPACES');
   const nodeEnv = getEnv('NODE_ENV');
 
   if (logLevel) {

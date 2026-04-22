@@ -136,12 +136,10 @@ export function createRateLimitedTransport(
 }
 
 /** Per-namespace rate limit configuration */
-export interface NamespaceRateLimits {
-  [namespace: string]: {
+export type NamespaceRateLimits = Record<string, {
     maxLogsPerSecond: number;
     burstAllowance?: number;
-  };
-}
+  }>;
 
 /**
  * Create a transport with per-namespace rate limiting

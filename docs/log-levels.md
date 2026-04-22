@@ -1,34 +1,27 @@
 # Log Levels
 
-Six levels from most verbose to most critical.
+There are **six** levels, from most verbose to most critical. Internally they use priority **0–5** (see the [API reference](/api#log-levels) for the exact table).
 
-## Level Hierarchy
+## Choosing a level
 
-| Level | Priority | When to Use |
-|-------|:--------:|-------------|
-| `trace` | 10 | Detailed debugging (function entry/exit, variable values) |
-| `debug` | 20 | Development debugging (request details, state changes) |
-| `info` | 30 | Normal operations (server started, user logged in) |
-| `warn` | 40 | Potential issues (deprecated API, high memory) |
-| `error` | 50 | Errors (failed request, caught exception) |
-| `fatal` | 60 | Critical failures (app crash, unrecoverable) |
+- **`trace` / `debug`** — local troubleshooting, high volume (often off in production).
+- **`info`** — normal lifecycle events (started, completed).
+- **`warn`** — something odd but the app continues.
+- **`error` / `fatal`** — failures; `fatal` is reserved for the worst cases.
 
-## Level Filtering
+## Filtering with `minLevel`
 
-Setting `minLevel` logs that level **and all higher priority levels**:
+Only messages with **severity ≥ `minLevel`** are emitted. Example:
 
 ```typescript
 const log = createLogger('App', { minLevel: 'warn' });
 
-log.trace('ignored');  // ❌ priority 10 < 40
-log.debug('ignored');  // ❌ priority 20 < 40
-log.info('ignored');   // ❌ priority 30 < 40
-log.warn('logged');    // ✅ priority 40 >= 40
-log.error('logged');   // ✅ priority 50 >= 40
-log.fatal('logged');   // ✅ priority 60 >= 40
+log.info('startup');  // skipped — below `warn`
+log.warn('slow');     // kept
+log.error('failed');  // kept
 ```
 
-### Quick Reference Table
+### Matrix
 
 | `minLevel` | trace | debug | info | warn | error | fatal |
 |------------|:-----:|:-----:|:----:|:----:|:-----:|:-----:|
@@ -39,45 +32,12 @@ log.fatal('logged');   // ✅ priority 60 >= 40
 | `'error'`  |  ❌   |  ❌   |  ❌  |  ❌  |  ✅   |  ✅   |
 | `'fatal'`  |  ❌   |  ❌   |  ❌  |  ❌  |  ❌   |  ✅   |
 
-## Runtime Level Control
+## Global + per-logger
 
-Change log level at runtime:
+`configure({ minLevel })` and `setGlobalLevel()` set a **global floor**. The **stricter** of the global floor and each logger’s `minLevel` wins (so a logger created with `minLevel: 'error'` does not start logging at `info` when the global is `trace`). Details: [Global configuration](/global-configuration).
 
-```typescript
-const log = createLogger('App');
+## See also
 
-// Start with all levels
-log.trace('Detailed info');  // ✅ Logged
-
-// Later, reduce noise
-log.setLevel('error');
-log.trace('Detailed info');  // ❌ Now ignored
-log.error('Problem!');       // ✅ Still logged
-```
-
-### Check Before Expensive Operations
-
-Avoid computing expensive data if it won't be logged:
-
-```typescript
-if (log.isLevelEnabled('debug')) {
-  // Only compute if debug is enabled
-  const debugData = JSON.stringify(largeObject, null, 2);
-  log.debug('Full state', { data: debugData });
-}
-```
-
-## Environment Defaults
-
-| Environment | Default `minLevel` |
-|-------------|-------------------|
-| Development | `trace` (all logs) |
-| Test | `trace` (all logs) |
-| Production | `info` (no trace/debug) |
-
-Override:
-
-```typescript
-// Force specific level regardless of environment
-const log = createLogger('App', { minLevel: 'debug' });
-```
+- [API: levels & environment defaults](/api#log-levels)
+- [Environment & `NODE_ENV`](/environment)
+- [Timing (`time` / `timer.end` logs at **debug** )](/api#timing)

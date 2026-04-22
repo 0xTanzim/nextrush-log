@@ -194,7 +194,7 @@ export function getEnvVar(name: string): string | undefined {
 
     // Vite / modern bundlers using import.meta.env
     // Note: This is evaluated at build time by bundlers
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+     
     if (typeof import.meta !== 'undefined' && (import.meta as ImportMeta & { env?: Record<string, string> }).env) {
       const env = (import.meta as ImportMeta & { env: Record<string, string> }).env;
       // Vite prefixes with VITE_ by default

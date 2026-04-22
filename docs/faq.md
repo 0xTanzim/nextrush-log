@@ -24,7 +24,7 @@ Yes! Full TypeScript support with complete type definitions included. No additio
 
 | Runtime | Supported | Notes |
 |---------|:---------:|-------|
-| Node.js | ✅ | v16+ recommended |
+| Node.js | ✅ | v18+ (`engines` in package) |
 | Bun | ✅ | Full support |
 | Deno | ✅ | Use npm: specifier |
 | Browser | ✅ | Works in all modern browsers |
@@ -95,28 +95,31 @@ resetGlobalConfig(); // Back to factory defaults
 
 ### What are the available log levels?
 
-| Level | Priority | Use Case |
-|-------|:--------:|----------|
-| `trace` | 10 | Detailed debugging (function entry/exit) |
-| `debug` | 20 | Development debugging |
-| `info` | 30 | Normal operations (default in production) |
-| `warn` | 40 | Potential issues |
-| `error` | 50 | Recoverable errors |
-| `fatal` | 60 | Critical failures |
+| Level | Internal priority | Use case |
+|-------|:-----------------:|----------|
+| `trace` | 0 | Very chatty diagnostics |
+| `debug` | 1 | Development detail |
+| `info` | 2 | Normal operations (typical prod default) |
+| `warn` | 3 | Something wrong, app continues |
+| `error` | 4 | Failures |
+| `fatal` | 5 | Worst-case failures |
 
 ### How does level filtering work?
 
-Setting `minLevel` logs that level **and all higher priority levels**:
+Only levels **at or above** `minLevel` are emitted (see [log levels](/log-levels)):
 
 ```typescript
 const log = createLogger('App', { minLevel: 'warn' });
 
-log.debug('ignored'); // ❌ Priority 20 < 40
-log.info('ignored');  // ❌ Priority 30 < 40
-log.warn('logged');   // ✅ Priority 40 = 40
-log.error('logged');  // ✅ Priority 50 > 40
-log.fatal('logged');  // ✅ Priority 60 > 40
+log.debug('ignored');
+log.info('ignored');
+log.warn('logged');
+log.error('logged');
 ```
+
+### How does `configure({ minLevel })` interact with per-logger `minLevel`?
+
+The **stricter** wins: a logger created with `minLevel: 'error'` will not start logging at `info` when the global floor is `trace`. To drop only the **global** floor and keep per-logger rules, use `clearGlobalLevel()` (or `resetGlobalConfig()` for a full reset).
 
 ### How do I change log level at runtime?
 

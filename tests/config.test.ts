@@ -4,20 +4,21 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  addGlobalTransport,
-  clearGlobalTransports,
-  configure,
-  configureFromEnv,
-  createLogger,
-  disableLogging,
-  disableNamespaces,
-  enableLogging,
-  enableNamespaces,
-  getGlobalConfig,
-  isNamespaceEnabled,
-  onConfigChange,
-  resetGlobalConfig,
-  setGlobalLevel,
+    addGlobalTransport,
+    clearGlobalLevel,
+    clearGlobalTransports,
+    configure,
+    configureFromEnv,
+    createLogger,
+    disableLogging,
+    disableNamespaces,
+    enableLogging,
+    enableNamespaces,
+    getGlobalConfig,
+    isNamespaceEnabled,
+    onConfigChange,
+    resetGlobalConfig,
+    setGlobalLevel,
 } from '../src/core/index.js';
 import type { LogEntry } from '../src/types/index.js';
 
@@ -106,6 +107,17 @@ describe('Global Configuration', () => {
       expect(console.info).not.toHaveBeenCalled();
       expect(console.warn).toHaveBeenCalledTimes(1);
     });
+
+    it('uses the stricter of global floor and per-logger minLevel', () => {
+      const log = createLogger('Test', { minLevel: 'error', pretty: false });
+      configure({ minLevel: 'trace' });
+
+      log.info('no');
+      log.error('yes');
+
+      expect(console.info).not.toHaveBeenCalled();
+      expect(console.error).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('configure', () => {
@@ -127,6 +139,28 @@ describe('Global Configuration', () => {
       const config = getGlobalConfig();
       expect(config.minLevel).toBe('warn');
       expect(config.silent).toBe(true);
+    });
+
+    it('should deep-merge defaults so partial updates do not drop keys', () => {
+      configure({ defaults: { minLevel: 'info', pretty: true } });
+      configure({ defaults: { redact: true } });
+
+      const config = getGlobalConfig();
+      expect(config.defaults.minLevel).toBe('info');
+      expect(config.defaults.pretty).toBe(true);
+      expect(config.defaults.redact).toBe(true);
+    });
+
+    it('should let defaults.minLevel affect existing loggers with no explicit minLevel', () => {
+      const log = createLogger('Test', { pretty: false });
+      log.info('a');
+      expect(console.info).toHaveBeenCalledTimes(1);
+
+      configure({ defaults: { minLevel: 'warn' } });
+      log.info('b');
+      expect(console.info).toHaveBeenCalledTimes(1);
+      log.warn('c');
+      expect(console.warn).toHaveBeenCalled();
     });
   });
 
@@ -238,6 +272,15 @@ describe('Global Configuration', () => {
     });
   });
 
+  describe('clearGlobalLevel', () => {
+    it('should unset the global min level floor', () => {
+      setGlobalLevel('error');
+      expect(getGlobalConfig().minLevel).toBe('error');
+      clearGlobalLevel();
+      expect(getGlobalConfig().minLevel).toBeUndefined();
+    });
+  });
+
   describe('resetGlobalConfig', () => {
     it('should reset all settings to defaults', () => {
       // Apply changes
@@ -300,6 +343,15 @@ describe('Global Configuration', () => {
 
       const config = getGlobalConfig();
       expect(config.minLevel).toBe('warn');
+    });
+
+    it('should read NEXT_PUBLIC_LOG_LEVEL when LOG_LEVEL is unset (Next.js client)', () => {
+      const mockEnv = (name: string): string | undefined => {
+        if (name === 'NEXT_PUBLIC_LOG_LEVEL') return 'error';
+        return undefined;
+      };
+      configureFromEnv(mockEnv);
+      expect(getGlobalConfig().minLevel).toBe('error');
     });
 
     it('should ignore invalid LOG_LEVEL values', () => {
@@ -457,7 +509,9 @@ describe('Global Configuration', () => {
       onConfigChange(goodListener);
 
       // Should not throw
-      expect(() => configure({ minLevel: 'warn' })).not.toThrow();
+      expect(() => {
+        configure({ minLevel: 'warn' });
+      }).not.toThrow();
 
       // Good listener should still be called
       expect(goodListener).toHaveBeenCalledTimes(1);

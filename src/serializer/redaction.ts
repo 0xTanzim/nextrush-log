@@ -173,5 +173,6 @@ export function mergeSensitiveKeys(customKeys: string[] = []): string[] {
 export function sanitizeContext(context: string): string {
   if (!context || typeof context !== 'string') return 'unknown';
   // Remove newlines, tabs, and other control characters
+  // eslint-disable-next-line no-control-regex -- C0 + DEL, intentional for log injection hardening
   return context.replace(/[\r\n\t\x00-\x1F\x7F]/g, '_');
 }

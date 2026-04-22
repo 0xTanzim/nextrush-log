@@ -1,12 +1,45 @@
 import { defineConfig } from 'vitepress';
 
+/** Production site origin (GitHub Pages project site) */
+const SITE_ORIGIN = 'https://0xtanzim.github.io';
+const SITE_PATH = '/nextrush-log/';
+
 export default defineConfig({
-  base: '/nextrush-log/',
+  base: SITE_PATH,
 
   title: '@nextrush/log',
-  description: 'Universal logging for modern JavaScript',
+  description:
+    'Universal, zero-dependency logger for Node, edge, serverless, browsers, React, and Next.js',
 
-  head: [['link', { rel: 'icon', type: 'image/svg+xml', href: '/logo.svg' }]],
+  head: [
+    ['link', { rel: 'icon', type: 'image/svg+xml', href: '/logo.svg' }],
+    ['meta', { name: 'theme-color', content: '#4f46e5' }],
+    ['meta', { name: 'robots', content: 'index, follow' }],
+    ['meta', { property: 'og:type', content: 'website' }],
+    ['meta', { property: 'og:site_name', content: '@nextrush/log' }],
+    ['meta', { property: 'og:title', content: '@nextrush/log — Universal logger for JavaScript' }],
+    [
+      'meta',
+      {
+        property: 'og:description',
+        content:
+          'Structured logging for Node, edge, serverless, browsers, React, and Next.js. Global singleton config, redaction, transports.',
+      },
+    ],
+    ['meta', { property: 'og:url', content: `${SITE_ORIGIN}${SITE_PATH}` }],
+    ['meta', { name: 'twitter:card', content: 'summary' }],
+    ['meta', { name: 'twitter:title', content: '@nextrush/log' }],
+    [
+      'meta',
+      {
+        name: 'twitter:description',
+        content:
+          'Zero-dependency logger: global configure, levels, browser + React, async context.',
+      },
+    ],
+  ],
+
+  lastUpdated: true,
 
   themeConfig: {
     logo: '/logo.svg',
@@ -56,8 +89,8 @@ export default defineConfig({
     ],
 
     footer: {
-      message: 'Released under the MIT License.',
-      copyright: 'Copyright © 2025 Tanzim Hossain',
+      message: 'MIT License · zero runtime dependencies',
+      copyright: 'Copyright © 2026 Tanzim Hossain',
     },
 
     search: {

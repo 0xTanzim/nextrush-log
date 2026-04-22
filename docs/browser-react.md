@@ -12,7 +12,7 @@ log.info('Works in browser!');
 ```
 
 Output goes to browser console with appropriate console methods:
-- `trace` → `console.debug`
+- `trace` → `console.log` (stays visible when default level is “Info”)
 - `debug` → `console.debug`
 - `info` → `console.info`
 - `warn` → `console.warn`
@@ -48,8 +48,8 @@ function App() {
       context="MyApp"
       options={{ minLevel: 'debug' }}
       globalConfig={{
-        // Control all loggers from provider
-        enabled: import.meta.env.PROD,
+        // Example: verbose in dev, quieter in prod (adjust to taste)
+        enabled: true,
         minLevel: import.meta.env.PROD ? 'info' : 'debug',
         enabledNamespaces: ['*'],
       }}

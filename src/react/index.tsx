@@ -88,12 +88,11 @@ export function LoggerProvider(props: LoggerProviderProps): ReactNode {
   const { context = 'app', children, globalConfig: globalConfigProp } = props;
   const options = props.options;
 
-  // Apply global config on mount
-  const hasAppliedGlobalConfig = useRef(false);
-  if (!hasAppliedGlobalConfig.current && globalConfigProp) {
-    configure(globalConfigProp);
-    hasAppliedGlobalConfig.current = true;
-  }
+  useEffect(() => {
+    if (globalConfigProp) {
+      configure(globalConfigProp);
+    }
+  }, [globalConfigProp]);
 
   const loggerRef = useRef<Logger | null>(null);
   const childLoggersRef = useRef(new Map<string, Logger>());

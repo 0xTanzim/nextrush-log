@@ -71,7 +71,7 @@ graph TB
         H --> J[JSON Format]
         K[transport/] --> L[Console]
         K --> M[Batch]
-        K --> N[Filter]
+        K --> N[filtered / ratelimit]
     end
 
     subgraph Utilities
@@ -96,20 +96,21 @@ src/
 │
 ├── serializer/     # Data processing
 │   ├── serialize.ts    # Safe object serialization
-│   ├── redact.ts       # Sensitive data removal
+│   ├── redaction.ts    # Sensitive data removal
 │   └── error.ts        # Error stack handling
 │
 ├── formatter/      # Output formatting
-│   ├── pretty.ts   # Human-readable (development)
-│   └── json.ts     # Structured JSON (production)
+│   ├── pretty.ts   # Terminal human-readable
+│   ├── json.ts     # Structured JSON
+│   └── browser.ts  # Browser console (CSS)
 │
 ├── transport/      # Output destinations
 │   ├── console.ts  # Console output
 │   ├── batch.ts    # Batched sending
-│   └── filter.ts   # Level filtering
+│   └── filtered.ts # Predicate / level helpers
 │
 ├── runtime/        # Environment detection
-│   └── detect.ts   # Node/Browser/Edge detection
+│   └── index.ts    # Node / browser / edge detection
 │
 ├── browser/        # Browser-specific utilities
 │   └── index.ts    # Error capture, beacon transport
@@ -131,14 +132,14 @@ interface LogEntry {
   level: LogLevel;        // 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal'
   context: string;        // Logger name
   message: string;        // Log message
-  data?: object;          // Structured data
+  data?: object;          // Structured data (metadata merged here)
   error?: {               // Error details
     name: string;
     message: string;
     stack?: string;
   };
   correlationId?: string; // Request tracing
-  metadata?: object;      // Additional context
+  performance?: { duration?: number }; // e.g. timer.end()
   runtime: string;        // 'node' | 'browser' | 'edge' | etc.
 }
 ```

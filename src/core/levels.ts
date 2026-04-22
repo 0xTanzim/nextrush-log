@@ -32,6 +32,14 @@ export function shouldLog(level: LogLevel, minLevel: LogLevel): boolean {
 }
 
 /**
+ * Return the stricter of two minimum levels (the one that allows fewer messages).
+ * Example: stricter between `warn` and `error` is `error`.
+ */
+export function stricterMinLevel(a: LogLevel, b: LogLevel): LogLevel {
+  return LOG_LEVEL_PRIORITY[a] >= LOG_LEVEL_PRIORITY[b] ? a : b;
+}
+
+/**
  * Compare two log levels
  * Returns negative if a < b, positive if a > b, zero if equal
  */

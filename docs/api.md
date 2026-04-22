@@ -8,14 +8,14 @@ Complete API documentation for `@nextrush/log`.
 
 ### Level Hierarchy
 
-| Level | Priority | Description |
-|-------|:--------:|-------------|
-| `trace` | 10 | Most verbose — detailed debugging |
-| `debug` | 20 | Development debugging |
-| `info` | 30 | Normal operations (production default) |
-| `warn` | 40 | Potential issues |
-| `error` | 50 | Errors (recoverable) |
-| `fatal` | 60 | Critical failures |
+| Level | Priority (internal) | Description |
+|-------|:-------------------:|-------------|
+| `trace` | 0 | Most verbose — detailed debugging |
+| `debug` | 1 | Development debugging |
+| `info` | 2 | Normal operations (production default) |
+| `warn` | 3 | Potential issues |
+| `error` | 4 | Errors (recoverable) |
+| `fatal` | 5 | Critical failures |
 
 ### Level Filtering
 
@@ -42,6 +42,9 @@ The logger auto-configures based on `NODE_ENV`:
 | `pretty` | `true` | `true` | `false` |
 | `colors` | `true` | `true` | `false` |
 | `redact` | `false` | `false` | `true` |
+| `silent` (console) | `false` | `true`* | `false` |
+
+\* When `NODE_ENV=test`, `configureFromEnv` sets `defaults.silent` unless you already set it.
 
 Override with `env` option or individual settings.
 
@@ -73,8 +76,8 @@ import { configure } from '@nextrush/log';
 
 configure({
   enabled: true,              // Master switch
-  minLevel: 'warn',           // Override all loggers
-  silent: false,              // Force silent mode
+  minLevel: 'warn',           // Global floor (stricter of this and each logger’s floor wins)
+  silent: false,              // Global kill: no log output when true
   env: 'production',          // Environment preset
   enabledNamespaces: ['api:*'],  // Namespace filtering
   disabledNamespaces: ['debug:*'],
@@ -99,7 +102,7 @@ enableLogging();  // Re-enable logging
 ```typescript
 import { setGlobalLevel } from '@nextrush/log';
 
-setGlobalLevel('error'); // Only error + fatal globally
+setGlobalLevel('error'); // Global floor: stricter vs each logger’s `minLevel` wins
 ```
 
 ### Namespace Filtering
@@ -136,19 +139,29 @@ clearGlobalTransports();
 ```typescript
 import { configureFromEnv } from '@nextrush/log';
 
-// Read LOG_LEVEL, LOG_ENABLED, LOG_NAMESPACES, NODE_ENV
+// Reads LOG_LEVEL, LOG_ENABLED, LOG_NAMESPACES, NODE_ENV
+// Also: NEXT_PUBLIC_LOG_LEVEL, VITE_LOG_LEVEL, NEXT_PUBLIC_LOG_ENABLED, etc.
 configureFromEnv((name) => process.env[name]);
 ```
 
-### getGlobalConfig() / resetGlobalConfig()
+Or pass `getEnvVar` from the main package (works across runtimes):
 
 ```typescript
-import { getGlobalConfig, resetGlobalConfig } from '@nextrush/log';
+import { configureFromEnv, getEnvVar } from '@nextrush/log';
+
+configureFromEnv(getEnvVar);
+```
+
+### getGlobalConfig() / resetGlobalConfig() / clearGlobalLevel()
+
+```typescript
+import { getGlobalConfig, resetGlobalConfig, clearGlobalLevel } from '@nextrush/log';
 
 const config = getGlobalConfig();
 console.log(config.enabled, config.minLevel);
 
-resetGlobalConfig(); // Reset to defaults
+clearGlobalLevel(); // Unset global minLevel (per-logger + defaults apply)
+resetGlobalConfig(); // Full reset to factory defaults
 ```
 
 ### onConfigChange()
@@ -236,6 +249,34 @@ const log = createLogger('API', {
 // Only errors
 const log = createLogger('App', { minLevel: 'error' });
 ```
+
+### `log`, `logger`, and `scopedLogger`
+
+The package also exports a **default app logger** and aliases:
+
+```typescript
+import { log, logger, scopedLogger, createLogger } from '@nextrush/log';
+
+log.info('Same as a pre-built createLogger("app")');
+logger.info('Identical to `log`');
+const auth = scopedLogger('auth:login'); // createLogger('auth:login')
+```
+
+### Level helpers (tree-shakeable)
+
+```typescript
+import {
+  shouldLog,
+  stricterMinLevel,
+  compareLevels,
+  parseLogLevel,
+  isValidLogLevel,
+  LOG_LEVELS,
+  LOG_LEVEL_PRIORITY,
+} from '@nextrush/log';
+```
+
+Use these when you need the same level math as the library (e.g. custom filters).
 
 ---
 
@@ -362,10 +403,18 @@ log.getCorrelationId(): string | undefined
 
 ### flush
 
-Flush all transports (for graceful shutdown).
+Flush all transports (for graceful shutdown). Only **instance** transports are flushed; global transports are not (unless you flush them yourself).
 
 ```typescript
 await log.flush(): Promise<void>
+```
+
+### dispose
+
+Unsubscribe this logger from global config change notifications. Use when you create many **short-lived** loggers to avoid listener buildup.
+
+```typescript
+log.dispose(): void
 ```
 
 ---
@@ -422,6 +471,10 @@ userLog.info('Action performed'); // includes userId and role
 
 ## Timing
 
+::: info Log level
+`timer.end()` emits a **`debug`**-level entry. It only appears if your effective minimum level includes `debug` (and global/namespace rules allow it).
+:::
+
 ### time
 
 Start a performance timer.
@@ -434,8 +487,8 @@ Returns:
 
 ```typescript
 interface Timer {
-  elapsed(): number;                    // Get elapsed ms without stopping
-  end(message?: string, data?): number; // Log duration and return ms
+  elapsed(): number; // Get elapsed ms without stopping
+  end(message?: string, context?: Record<string, unknown>): number; // Log duration and return ms
 }
 ```
 
@@ -713,10 +766,10 @@ interface LogEntry {
   level: LogLevel;
   context: string;
   message: string;
+  /** Structured payload (logger `metadata` and async context merge here) */
   data?: Record<string, unknown>;
   error?: SerializedError;
   correlationId?: string;
-  metadata?: Record<string, unknown>;
   performance?: { duration: number };
   runtime: string;
   pid?: number;
@@ -760,15 +813,6 @@ interface LoggerOptions {
   maxArrayLength?: number;
   samplingRate?: number;
   transports?: LogTransport[];
-}
-```
-
-### Timer
-
-```typescript
-interface Timer {
-  elapsed(): number;
-  end(message?: string, context?: Record<string, unknown>): number;
 }
 ```
 

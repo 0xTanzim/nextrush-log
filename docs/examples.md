@@ -584,18 +584,18 @@ export async function fetchUser(id: string) {
 
 ```tsx
 // src/App.tsx
-import { LogProvider, LogErrorBoundary } from '@nextrush/log/react';
+import { LoggerProvider, LogErrorBoundary } from '@nextrush/log/react';
 
 export default function App() {
   return (
-    <LogProvider
+    <LoggerProvider
       context="MyApp"
       options={{ minLevel: import.meta.env.PROD ? 'warn' : 'debug' }}
     >
       <LogErrorBoundary fallback={<ErrorPage />}>
         <Router />
       </LogErrorBoundary>
-    </LogProvider>
+    </LoggerProvider>
   );
 }
 ```

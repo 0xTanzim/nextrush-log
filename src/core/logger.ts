@@ -6,28 +6,28 @@
 import { getAsyncContext } from '../context/index.js';
 import { getEnvVar, getProcessId, getRuntime, isProductionBuild } from '../runtime/index.js';
 import {
-  createSerializationOptions,
-  mergeSensitiveKeys,
-  safeSerialize,
-  sanitizeContext,
-  serializeError,
+    createSerializationOptions,
+    mergeSensitiveKeys,
+    safeSerialize,
+    sanitizeContext,
+    serializeError,
 } from '../serializer/index.js';
 import { outputToConsole } from '../transport/console.js';
 import type {
-  ILogger,
-  LogContext,
-  LogEntry,
-  LoggerEnvironment,
-  LoggerOptions,
-  LogLevel,
-  LogTransport,
-  ResolvedLoggerOptions,
-  SerializationOptions,
-  Timer,
+    ILogger,
+    LogContext,
+    LogEntry,
+    LoggerEnvironment,
+    LoggerOptions,
+    LogLevel,
+    LogTransport,
+    ResolvedLoggerOptions,
+    SerializationOptions,
+    Timer,
 } from '../types/index.js';
 import { formatTimestamp, getTime } from '../utils/time.js';
 import { getGlobalConfig, isNamespaceEnabled, onConfigChange, type GlobalLoggerConfig } from './config.js';
-import { shouldLog as shouldLogLevel } from './levels.js';
+import { shouldLog as shouldLogLevel, stricterMinLevel } from './levels.js';
 
 /**
  * Core Logger class
@@ -45,11 +45,21 @@ export class Logger implements ILogger {
   private readonly sensitiveKeys: string[];
   private cachedGlobalConfig: GlobalLoggerConfig;
   private readonly configUnsubscribe: () => void;
+  /**
+   * Per-instance level from constructor or `setLevel` only (undefined = use global defaults + env floor).
+   * Not the same as resolved `this.options.minLevel` when that was only from global defaults.
+   */
+  private explicitUserMin: LogLevel | undefined;
+  /** Environment baseline (dev/test vs prod) fixed at construction */
+  private readonly envBaselineMin: LogLevel;
 
   constructor(context: string, options: LoggerOptions = {}) {
     // Sanitize context to prevent log injection
     this.context = sanitizeContext(context);
-    this.options = this.resolveOptions(options);
+    this.explicitUserMin = options.minLevel;
+    const { resolved, envBaselineMin } = this.resolveOptions(options);
+    this.options = resolved;
+    this.envBaselineMin = envBaselineMin;
     this.sensitiveKeys = mergeSensitiveKeys(this.options.sensitiveKeys);
 
     // Cache global config for performance
@@ -62,7 +72,10 @@ export class Logger implements ILogger {
   /**
    * Resolve user options with defaults
    */
-  private resolveOptions(options: LoggerOptions): ResolvedLoggerOptions {
+  private resolveOptions(options: LoggerOptions): {
+    resolved: ResolvedLoggerOptions;
+    envBaselineMin: LogLevel;
+  } {
     const runtime = getRuntime();
     const globalConfig = getGlobalConfig();
     const nodeEnv = getEnvVar('NODE_ENV');
@@ -89,8 +102,11 @@ export class Logger implements ILogger {
     const defaultColors = runtime.supportsColors && (isDev || isTest);
     const defaultRedact = isProd;
 
+    const resolvedMin =
+      this.explicitUserMin ?? defaults.minLevel ?? defaultMinLevel;
+
     const result: ResolvedLoggerOptions = {
-      minLevel: options.minLevel ?? defaults.minLevel ?? defaultMinLevel,
+      minLevel: resolvedMin,
       pretty: options.pretty ?? defaults.pretty ?? defaultPretty,
       colors: options.colors ?? defaults.colors ?? defaultColors,
       transports: options.transports ?? defaults.transports ?? [],
@@ -110,7 +126,18 @@ export class Logger implements ILogger {
       result.correlationId = options.correlationId;
     }
 
-    return result;
+    return { resolved: result, envBaselineMin: defaultMinLevel };
+  }
+
+  /** Effective minimum level: singleton `configure` + per-logger + env baseline */
+  private getEffectiveMinLevel(): LogLevel {
+    const g = this.cachedGlobalConfig;
+    const floor =
+      this.explicitUserMin ?? g.defaults.minLevel ?? this.envBaselineMin;
+    if (g.minLevel === undefined) {
+      return floor;
+    }
+    return stricterMinLevel(g.minLevel, floor);
   }
 
   /**
@@ -126,9 +153,7 @@ export class Logger implements ILogger {
     // Check namespace filtering
     if (!isNamespaceEnabled(this.context)) return false;
 
-    // Global minimum level override
-    const effectiveMinLevel = globalConfig.minLevel ?? this.options.minLevel;
-    if (!shouldLogLevel(level, effectiveMinLevel)) return false;
+    if (!shouldLogLevel(level, this.getEffectiveMinLevel())) return false;
 
     // Global silent mode
     if (globalConfig.silent) return false;
@@ -167,7 +192,7 @@ export class Logger implements ILogger {
     error: Error | undefined;
   } {
     let message = '';
-    let data: LogContext = {};
+    const data: LogContext = {};
     let error: Error | undefined;
 
     for (const arg of args) {
@@ -411,8 +436,9 @@ export class Logger implements ILogger {
     // Always inherit parent's correlationId unless explicitly overridden
     const inheritedCorrelationId = options.correlationId ?? this.options.correlationId;
 
+    const inheritedMin = options.minLevel ?? this.explicitUserMin;
+
     const childOptions: LoggerOptions = {
-      minLevel: options.minLevel ?? this.options.minLevel,
       pretty: options.pretty ?? this.options.pretty,
       colors: options.colors ?? this.options.colors,
       transports: options.transports ?? this.options.transports,
@@ -431,7 +457,9 @@ export class Logger implements ILogger {
       env: options.env ?? this.options.env,
     };
 
-    // Only add correlationId if it's defined
+    if (inheritedMin !== undefined) {
+      childOptions.minLevel = inheritedMin;
+    }
     if (inheritedCorrelationId !== undefined) {
       childOptions.correlationId = inheritedCorrelationId;
     }
@@ -450,10 +478,28 @@ export class Logger implements ILogger {
    * Create a child logger with additional metadata
    */
   withMetadata(metadata: LogContext): Logger {
-    return new Logger(this.context, {
-      ...this.options,
+    const o: LoggerOptions = {
+      pretty: this.options.pretty,
+      colors: this.options.colors,
+      transports: this.options.transports,
       metadata: { ...this.options.metadata, ...metadata },
-    });
+      sensitiveKeys: this.options.sensitiveKeys,
+      maxDepth: this.options.maxDepth,
+      maxStringLength: this.options.maxStringLength,
+      maxArrayLength: this.options.maxArrayLength,
+      samplingRate: this.options.samplingRate,
+      timestamps: this.options.timestamps,
+      silent: this.options.silent,
+      redact: this.options.redact,
+      env: this.options.env,
+    };
+    if (this.explicitUserMin !== undefined) {
+      o.minLevel = this.explicitUserMin;
+    }
+    if (this.options.correlationId !== undefined) {
+      o.correlationId = this.options.correlationId;
+    }
+    return new Logger(this.context, o);
   }
 
   /**
@@ -488,6 +534,7 @@ export class Logger implements ILogger {
    * Change the minimum log level at runtime
    */
   setLevel(level: LogLevel): void {
+    this.explicitUserMin = level;
     this.options.minLevel = level;
   }
 
