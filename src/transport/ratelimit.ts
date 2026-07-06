@@ -17,6 +17,7 @@
  * ```
  */
 
+import { createNamespaceMatcher } from '../core/namespace-matcher.js';
 import type { LogEntry, LogLevel, LogTransport } from '../types/index.js';
 
 /** Rate limiter configuration */
@@ -158,17 +159,7 @@ export function createNamespaceRateLimitedTransport(
   limits: NamespaceRateLimits,
 ): LogTransport {
   const limiters = new Map<string, ReturnType<typeof createRateLimitedTransport>>();
-
-  function matchNamespace(context: string, pattern: string): boolean {
-    if (pattern === '*') return true;
-    if (pattern === context) return true;
-
-    const regexPattern = pattern
-      .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-      .replace(/\*/g, '.*');
-
-    return new RegExp(`^${regexPattern}$`).test(context);
-  }
+  const namespaceMatcher = createNamespaceMatcher();
 
   function getLimiter(context: string): ReturnType<typeof createRateLimitedTransport> | null {
     // Check cache
@@ -177,7 +168,7 @@ export function createNamespaceRateLimitedTransport(
 
     // Find matching pattern
     for (const pattern of Object.keys(limits)) {
-      if (matchNamespace(context, pattern)) {
+      if (namespaceMatcher.matches(context, pattern)) {
         const config = limits[pattern];
         if (!config) continue;
         const options: RateLimitOptions = {

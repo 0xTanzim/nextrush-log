@@ -3,18 +3,10 @@
  * Uses CSS styling for colorful browser console output
  */
 
-import type { LogEntry, LogLevel } from '../types/index.js';
+import type { LogEntry } from '../types/index.js';
 import { BROWSER_COLORS } from '../utils/colors.js';
-
-/** Level icons for visual distinction */
-const LEVEL_ICONS: Record<LogLevel, string> = {
-  trace: '🔍',
-  debug: '🐛',
-  info: 'ℹ️',
-  warn: '⚠️',
-  error: '❌',
-  fatal: '💀',
-};
+import { getConsoleMethod } from '../utils/console-method.js';
+import { LEVEL_ICONS } from '../utils/level-icons.js';
 
 /**
  * Compact, readable browser output when pretty mode is off (e.g. production JSON still hard to read).
@@ -48,7 +40,12 @@ export function logBrowser(entry: LogEntry): void {
   const icon = LEVEL_ICONS[entry.level];
   const label = entry.level.toUpperCase();
 
-  // Build format string and style arguments
+  // Build format string and style arguments.
+  // `entry.message` is attacker-controllable — it must NEVER be concatenated
+  // into the format string (a message containing %c/%s/%d would shift or
+  // corrupt the style args that follow). Instead the format string ends with
+  // a plain %s placeholder resolved by the message passed as its own trailing
+  // argument, so the browser's own format-specifier parsing can't be hijacked.
   let format = `%c${icon} [${label}] %c[${entry.context}]`;
   const styleArgs: string[] = [levelStyle, contextStyle];
 
@@ -57,15 +54,16 @@ export function logBrowser(entry: LogEntry): void {
     styleArgs.push(dimStyle);
   }
 
-  format += ` %c${entry.message}`;
+  format += ' %c%s';
   styleArgs.push(messageStyle);
 
   // Select appropriate console method
   const consoleMethod = getConsoleMethod(entry.level);
 
   try {
-    // Log the main formatted line
-    consoleMethod(format, ...styleArgs);
+    // Log the main formatted line — message passed as its own argument, never
+    // interpolated into the format string.
+    consoleMethod(format, ...styleArgs, entry.message);
 
     // Log additional data as expandable objects
     if (entry.data && Object.keys(entry.data).length > 0) {
@@ -93,27 +91,5 @@ export function logBrowser(entry: LogEntry): void {
     console.log(
       `[${entry.level.toUpperCase()}] [${entry.context}] ${entry.message}`,
     );
-  }
-}
-
-/**
- * Get the appropriate console method for a log level
- */
-function getConsoleMethod(level: LogLevel): (...args: unknown[]) => void {
-  switch (level) {
-    // `trace` uses log so it still appears when DevTools default level is "Info" (debug is often hidden)
-    case 'trace':
-      return console.log.bind(console);
-    case 'debug':
-      return console.debug.bind(console);
-    case 'info':
-      return console.info.bind(console);
-    case 'warn':
-      return console.warn.bind(console);
-    case 'error':
-    case 'fatal':
-      return console.error.bind(console);
-    default:
-      return console.log.bind(console);
   }
 }

@@ -87,6 +87,32 @@ describe('safeSerialize', () => {
       expect(safeSerialize(obj, defaultOptions)).toEqual({ a: { b: { c: 1 } } });
     });
 
+    it('should truncate objects with more keys than maxKeys', () => {
+      const options = createSerializationOptions({ maxKeys: 3 });
+      const obj = { a: 1, b: 2, c: 3, d: 4, e: 5 };
+
+      const result = safeSerialize(obj, options) as Record<string, unknown>;
+
+      expect(result['a']).toBe(1);
+      expect(result['b']).toBe(2);
+      expect(result['c']).toBe(3);
+      expect(result['d']).toBeUndefined();
+      expect(result['...']).toBe('[2 more keys]');
+    });
+
+    it('should default maxKeys to 100', () => {
+      const obj: Record<string, number> = {};
+      for (let i = 0; i < 150; i++) {
+        obj[`key${i}`] = i;
+      }
+
+      const result = safeSerialize(obj, defaultOptions) as Record<string, unknown>;
+      const resultKeys = Object.keys(result);
+
+      expect(resultKeys).toHaveLength(101); // 100 keys + truncation marker
+      expect(result['...']).toBe('[50 more keys]');
+    });
+
     it('should handle Date objects', () => {
       const date = new Date('2024-01-15T10:30:00.000Z');
       expect(safeSerialize(date, defaultOptions)).toBe(
@@ -194,6 +220,38 @@ describe('safeSerialize', () => {
       expect(result[0]).toBe(1);
       expect(result[1]).toBe(2);
       expect(result[2]).toBe('[Circular Reference]');
+    });
+
+    it('should fully serialize a shared (non-circular) reference at multiple sites', () => {
+      const shared = { id: 1, name: 'shared' };
+      const obj = { a: shared, b: shared };
+
+      const result = safeSerialize(obj, defaultOptions) as Record<
+        string,
+        unknown
+      >;
+
+      expect(result['a']).toEqual({ id: 1, name: 'shared' });
+      expect(result['b']).toEqual({ id: 1, name: 'shared' });
+    });
+
+    it('should still flag a genuinely circular object as circular after a sibling shares the same reference', () => {
+      const shared = { id: 1 };
+      const circular: Record<string, unknown> = { id: 2 };
+      circular['self'] = circular;
+
+      const obj = { a: shared, b: shared, c: circular };
+
+      const result = safeSerialize(obj, defaultOptions) as Record<
+        string,
+        unknown
+      >;
+
+      expect(result['a']).toEqual({ id: 1 });
+      expect(result['b']).toEqual({ id: 1 });
+      const c = result['c'] as Record<string, unknown>;
+      expect(c['id']).toBe(2);
+      expect(c['self']).toBe('[Circular Reference]');
     });
   });
 
@@ -370,6 +428,65 @@ describe('serializeError', () => {
 
     expect(result.message).toBe('Unknown error'); // Falls back
   });
+
+  it('should redact sensitive own-keys attached to an Error object', () => {
+    const options = createSerializationOptions({
+      sensitiveKeys: DEFAULT_SENSITIVE_KEYS as string[],
+    });
+    const error = new Error('login failed') as Error & {
+      password: string;
+      userId: string;
+    };
+    error.password = 'super-secret';
+    error.userId = 'user-123';
+
+    const result = serializeError(error, options);
+
+    expect(result['password']).toBe('[REDACTED]');
+    expect(result['userId']).toBe('user-123');
+  });
+});
+
+describe('nested error serialization (DEAD-1 regression)', () => {
+  const defaultOptions = createSerializationOptions();
+
+  it('should serialize an Error nested in a data object identically to a positional error', () => {
+    const error = new Error('Connection failed') as Error & {
+      code: string;
+      errno: number;
+      syscall: string;
+      hostname: string;
+      path: string;
+    };
+    error.code = 'ECONNREFUSED';
+    error.errno = -111;
+    error.syscall = 'connect';
+    error.hostname = 'localhost';
+    error.path = '/tmp/socket';
+
+    const positional = serializeError(error, defaultOptions);
+    const nested = safeSerialize({ err: error }, defaultOptions) as Record<
+      string,
+      unknown
+    >;
+
+    expect(nested['err']).toEqual(positional);
+  });
+
+  it('should preserve AggregateError.errors when the error is nested in a data object', () => {
+    const errors = [new Error('Error 1'), new Error('Error 2')];
+    const aggError = new AggregateError(errors, 'Multiple errors');
+
+    const nested = safeSerialize({ err: aggError }, defaultOptions) as Record<
+      string,
+      unknown
+    >;
+    const nestedErr = nested['err'] as Record<string, unknown>;
+
+    expect(nestedErr['name']).toBe('AggregateError');
+    expect(Array.isArray(nestedErr['errors'])).toBe(true);
+    expect((nestedErr['errors'] as unknown[]).length).toBe(2);
+  });
 });
 
 describe('redaction', () => {
@@ -415,6 +532,57 @@ describe('redaction', () => {
     const merged = mergeSensitiveKeys(['customSecret']);
     expect(merged).toContain('password');
     expect(merged).toContain('customSecret');
+  });
+
+  describe('SAFE-11: whole-token matching (no over-redaction)', () => {
+    const keys = DEFAULT_SENSITIVE_KEYS as string[];
+
+    it('should NOT redact primaryKey/foreignKey/partitionKey (contain "key" as substring only)', () => {
+      expect(shouldRedact('primaryKey', keys)).toBe(false);
+      expect(shouldRedact('foreignKey', keys)).toBe(false);
+      expect(shouldRedact('partitionKey', keys)).toBe(false);
+    });
+
+    it('should NOT redact passport/passenger (contain "pass" as substring only)', () => {
+      expect(shouldRedact('passport', keys)).toBe(false);
+      expect(shouldRedact('passenger', keys)).toBe(false);
+    });
+
+    it('should NOT redact author/authored (contain "auth" as substring only)', () => {
+      expect(shouldRedact('author', keys)).toBe(false);
+      expect(shouldRedact('authored', keys)).toBe(false);
+    });
+
+    it('should NOT redact wildcard/cardinality/discard (contain "card" as substring only)', () => {
+      expect(shouldRedact('wildcard', keys)).toBe(false);
+      expect(shouldRedact('cardinality', keys)).toBe(false);
+      expect(shouldRedact('discard', keys)).toBe(false);
+    });
+
+    it('should NOT redact hashtag (contains "hash" as substring only)', () => {
+      expect(shouldRedact('hashtag', keys)).toBe(false);
+    });
+
+    it('should NOT redact monkey (contains "key" as substring only)', () => {
+      expect(shouldRedact('monkey', keys)).toBe(false);
+    });
+
+    it('should still redact whole-token true positives: password, apiKey, secretToken', () => {
+      expect(shouldRedact('password', keys)).toBe(true);
+      expect(shouldRedact('apiKey', keys)).toBe(true); // ["api","key"] -> alias of "apikey"
+      expect(shouldRedact('secretToken', keys)).toBe(true); // ["secret","token"] -> both are sensitive tokens
+    });
+
+    it('should still redact snake_case and kebab-case whole-token matches', () => {
+      expect(shouldRedact('user_password', keys)).toBe(true);
+      expect(shouldRedact('api-key', keys)).toBe(true);
+      expect(shouldRedact('session_id', keys)).toBe(true);
+    });
+
+    it('should still redact an exact single-word sensitive key', () => {
+      expect(shouldRedact('token', keys)).toBe(true);
+      expect(shouldRedact('secret', keys)).toBe(true);
+    });
   });
 });
 

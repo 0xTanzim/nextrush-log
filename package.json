@@ -1,6 +1,6 @@
 {
   "name": "@nextrush/log",
-  "version": "0.2.5",
+  "version": "0.3.0",
   "description": "Universal, zero-dependency, production-grade logger for modern JavaScript runtimes",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -37,16 +37,6 @@
         "default": "./dist/react.cjs"
       }
     },
-    "./context": {
-      "import": {
-        "types": "./dist/context.d.ts",
-        "default": "./dist/context.js"
-      },
-      "require": {
-        "types": "./dist/context.d.cts",
-        "default": "./dist/context.cjs"
-      }
-    },
     "./testing": {
       "import": {
         "types": "./dist/testing.d.ts",
@@ -78,6 +68,9 @@
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "pnpm build",
     "clean": "rm -rf dist coverage",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "pnpm build && changeset publish",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs"
@@ -121,6 +114,7 @@
     }
   },
   "devDependencies": {
+    "@changesets/cli": "2.31.0",
     "@eslint/js": "^9.39.2",
     "@types/node": "^25.0.3",
     "@types/react": "^19.2.7",
@@ -128,6 +122,7 @@
     "eslint": "^9.39.2",
     "prettier": "^3.7.4",
     "react": "^19.2.3",
+    "react-dom": "19.2.3",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.50.0",

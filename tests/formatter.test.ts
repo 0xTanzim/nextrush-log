@@ -8,6 +8,7 @@ import { logBrowser, logBrowserCompact } from '../src/formatter/browser.js';
 import { formatJSON, formatPrettyJSON } from '../src/formatter/json.js';
 import { formatPrettyTerminal } from '../src/formatter/pretty.js';
 import type { LogEntry } from '../src/types/index.js';
+import { getConsoleMethod } from '../src/utils/console-method.js';
 
 function createMockEntry(overrides: Partial<LogEntry> = {}): LogEntry {
   return {
@@ -343,6 +344,42 @@ describe('formatPrettyTerminal', () => {
     // Should contain ANSI color codes
     expect(result).toContain('\x1b[');
   });
+
+  it('should not let a message with embedded newlines forge extra rendered lines', () => {
+    const entry = createMockEntry({
+      message: 'clean start\nFAKE INFO [Admin] forged log line',
+    });
+    const result = formatPrettyTerminal(entry, false);
+
+    // The rendered output must have exactly one line for the header
+    // (message newline stripped), not two lines that look like separate entries.
+    const headerLine = result.split('\n')[0] ?? '';
+    expect(headerLine).toContain('clean start');
+    expect(headerLine).toContain('forged log line');
+    expect(result).not.toContain('\nFAKE INFO');
+  });
+
+  it('should strip ANSI escape sequences embedded in the message', () => {
+    const entry = createMockEntry({
+      message: 'hidden\x1b[31mred text\x1b[0m',
+    });
+    const result = formatPrettyTerminal(entry, false);
+
+    // Only the formatter's own (disabled) colors are absent; attacker-controlled
+    // escape sequences from the message must never reach raw output.
+    const messageSegment = result.split('\n')[0] ?? '';
+    expect(messageSegment).not.toContain('\x1b[31m');
+  });
+
+  it('should strip control characters from string data values', () => {
+    const entry = createMockEntry({
+      data: { note: 'line1\nline2\x1b[31m' },
+    });
+    const result = formatPrettyTerminal(entry, false);
+
+    expect(result).not.toContain('\x1b[31m');
+    expect(result).not.toMatch(/"line1\nline2/);
+  });
 });
 
 describe('logBrowser', () => {
@@ -482,6 +519,31 @@ describe('logBrowser', () => {
     // Should fall back to console.log
     expect(console.log).toHaveBeenCalled();
   });
+
+  it('should not let a message containing %c corrupt the style arguments', () => {
+    const entry = createMockEntry({
+      message: '%c%s injected',
+      correlationId: 'req-1',
+    });
+    logBrowser(entry);
+
+    const call = (console.info as ReturnType<typeof vi.fn>).mock.calls[0] ?? [];
+    const [format, ...args] = call as [string, ...unknown[]];
+
+    // The format string's own %c placeholders must all be accounted for by
+    // style args supplied by the formatter, not shifted by message content.
+    const placeholderCount = (format.match(/%c/g) ?? []).length;
+    const styleArgs = args.slice(0, placeholderCount);
+    for (const styleArg of styleArgs) {
+      expect(typeof styleArg).toBe('string');
+      expect(styleArg as string).not.toContain('injected');
+    }
+
+    // The raw message must appear as its own trailing argument, not baked
+    // into the format string where %c/%s would be reinterpreted.
+    expect(args).toContain(entry.message);
+    expect(format).not.toContain('injected');
+  });
 });
 
 describe('logBrowserCompact', () => {
@@ -521,4 +583,28 @@ describe('logBrowserCompact', () => {
     expect(console.info).toHaveBeenCalled();
     expect(console.error).toHaveBeenCalled();
   });
+
+  it.each([
+    ['trace', 'log'],
+    ['debug', 'debug'],
+    ['info', 'info'],
+    ['warn', 'warn'],
+    ['error', 'error'],
+    ['fatal', 'error'],
+  ] as const)(
+    'should route %s through the same shared console-method resolver used by logBrowser',
+    (level, method) => {
+      const spy = vi.spyOn(console, method).mockImplementation(noop);
+      logBrowserCompact(createMockEntry({ level }));
+      expect(spy).toHaveBeenCalled();
+      // logBrowserCompact must resolve to the same underlying console method
+      // as the canonical resolver both formatter and transport share
+      // (DEAD-2) — verified by invoking the resolved function and checking
+      // it reaches the same spy (bind() means reference identity isn't
+      // meaningful, so behavior is asserted instead).
+      spy.mockClear();
+      getConsoleMethod(level)('probe');
+      expect(spy).toHaveBeenCalledWith('probe');
+    },
+  );
 });

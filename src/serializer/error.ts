@@ -4,6 +4,7 @@
  */
 
 import type { SerializationOptions, SerializedError } from '../types/index.js';
+import { REDACTED_PLACEHOLDER, shouldRedact } from './redaction.js';
 import { safeSerialize } from './serialize.js';
 
 /** Well-known error properties to extract */
@@ -32,7 +33,10 @@ export function serializeError(
     if (prop in error) {
       const value = (error as unknown as Record<string, unknown>)[prop];
       if (value !== undefined) {
-        serialized[prop] = value;
+        serialized[prop] =
+          options.redact && shouldRedact(prop, options.sensitiveKeys)
+            ? REDACTED_PLACEHOLDER
+            : value;
       }
     }
   }
@@ -93,6 +97,10 @@ export function serializeError(
     if (key === 'stack' || key === 'cause' || key === 'errors') continue;
 
     try {
+      if (options.redact && shouldRedact(key, options.sensitiveKeys)) {
+        serialized[key] = REDACTED_PLACEHOLDER;
+        continue;
+      }
       const value = (error as unknown as Record<string, unknown>)[key];
       serialized[key] = safeSerialize(value, options);
     } catch {

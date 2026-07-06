@@ -7,7 +7,8 @@ import { logBrowser, logBrowserCompact } from '../formatter/browser.js';
 import { formatJSON } from '../formatter/json.js';
 import { formatPrettyTerminal } from '../formatter/pretty.js';
 import { getRuntime } from '../runtime/index.js';
-import type { LogEntry, LogLevel, LogTransport } from '../types/index.js';
+import type { LogEntry, LogTransport } from '../types/index.js';
+import { getConsoleMethod } from '../utils/console-method.js';
 
 export interface ConsoleTransportOptions {
   /** Enable pretty formatting */
@@ -17,7 +18,23 @@ export interface ConsoleTransportOptions {
 }
 
 /**
- * Create a console transport
+ * Create a console transport.
+ *
+ * @remarks
+ * **Do NOT add this as a transport on a `Logger` instance** — the `Logger`
+ * already calls {@link outputToConsole} unconditionally for every log call
+ * (gated only by its `silent` option). Calling
+ * `logger.addTransport(createConsoleTransport())` will print every line
+ * TWICE (once from the logger's built-in console output, once from this
+ * transport). See API-6 in REPORT.md.
+ *
+ * This factory exists only for advanced/manual use: building a custom
+ * logging pipeline that does NOT go through the default `Logger` console
+ * path (e.g. composing it directly with {@link createFilteredTransport} or
+ * {@link createRateLimitedTransport} outside of a `Logger` instance). The
+ * root cause (the `Logger`'s unconditional console call) is out of scope for
+ * this fix; removing this export from the public barrel, if ever done, is a
+ * decision for a later API-cleanup wave.
  */
 export function createConsoleTransport(
   options: ConsoleTransportOptions = {},
@@ -56,25 +73,4 @@ export function outputToConsole(
   // Select console method based on level
   const logFn = getConsoleMethod(entry.level);
   logFn(formatted);
-}
-
-/**
- * Get the appropriate console method for a log level
- */
-function getConsoleMethod(level: LogLevel): (message: string) => void {
-  switch (level) {
-    case 'trace':
-      return console.log.bind(console);
-    case 'debug':
-      return console.debug.bind(console);
-    case 'info':
-      return console.info.bind(console);
-    case 'warn':
-      return console.warn.bind(console);
-    case 'error':
-    case 'fatal':
-      return console.error.bind(console);
-    default:
-      return console.log.bind(console);
-  }
 }

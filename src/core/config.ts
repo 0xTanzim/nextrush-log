@@ -3,43 +3,52 @@
  *
  * Provides centralized control over all logger instances.
  * Enables one-line enable/disable for entire application.
+ *
+ * Backed by `createConfigStore()` (src/core/config-store.ts) — the
+ * functions below are thin wrappers over one default store instance, kept
+ * for backward compatibility with the original singleton-style API.
  */
 
-import type { LoggerOptions, LogLevel, LogTransport } from '../types/index.js';
+import type { LogLevel, LogTransport } from '../types/index.js';
+import { createConfigStore, type ConfigStore } from './config-store.js';
 
-export interface GlobalLoggerConfig {
-  /** Global enable/disable all logging */
-  enabled: boolean;
-  /**
-   * Global minimum level floor: combined with each logger’s level by taking the **stricter**
-   * of the two (e.g. global `trace` + instance `error` → only `error` and above).
-   */
-  minLevel?: LogLevel;
-  /** Force silent mode globally */
-  silent: boolean;
-  /** Global transports applied to all loggers */
-  transports: LogTransport[];
-  /** Environment preset */
-  env?: 'development' | 'test' | 'production';
-  /** Namespace patterns to enable (e.g., ['api:*', 'db:*']) */
-  enabledNamespaces: string[];
-  /** Namespace patterns to disable */
-  disabledNamespaces: string[];
-  /** Default options for new loggers */
-  defaults: Partial<LoggerOptions>;
+export type { ConfigStore, GlobalLoggerConfig } from './config-store.js';
+export { createConfigStore } from './config-store.js';
+
+/**
+ * Well-known globalThis key backing the single default config store.
+ *
+ * Dual-package hazard fix: a bundler, monorepo, or host runtime can load
+ * BOTH the ESM and CJS builds of this package into the same process (e.g.
+ * one dependency `require()`s it while the app `import`s it). Each build is
+ * a *different* module-graph node with its own module-scoped variables, so a
+ * plain `const defaultStore = createConfigStore()` would silently create two
+ * independent stores — `disableLogging()` called through one build would
+ * never reach a logger created through the other. Routing the default store
+ * through a `globalThis` slot means every module instance in the same JS
+ * realm (same Node process, same browser tab, same Worker) converges on one
+ * shared store, regardless of how many times the module itself is
+ * separately evaluated.
+ */
+const DEFAULT_STORE_GLOBAL_KEY = '__NEXTRUSH_LOG_DEFAULT_CONFIG_STORE__';
+
+interface GlobalWithDefaultStore {
+  [DEFAULT_STORE_GLOBAL_KEY]?: ConfigStore;
 }
 
-const DEFAULT_CONFIG: GlobalLoggerConfig = {
-  enabled: true,
-  silent: false,
-  transports: [],
-  enabledNamespaces: ['*'],
-  disabledNamespaces: [],
-  defaults: {},
-};
+/**
+ * Get the single process-wide default config store, creating it on first
+ * access. Safe to call from any module instance — see the dual-package
+ * hazard note above.
+ */
+export function getDefaultConfigStore(): ConfigStore {
+  const g = globalThis as GlobalWithDefaultStore;
+  g[DEFAULT_STORE_GLOBAL_KEY] ??= createConfigStore();
+  return g[DEFAULT_STORE_GLOBAL_KEY];
+}
 
-let globalConfig: GlobalLoggerConfig = { ...DEFAULT_CONFIG };
-const configChangeListeners = new Set<() => void>();
+/** The default store backing the module-level convenience functions below. */
+const defaultStore = getDefaultConfigStore();
 
 /**
  * Configure global logger settings
@@ -58,39 +67,18 @@ const configChangeListeners = new Set<() => void>();
  * configure({ enabledNamespaces: ['api:*', 'auth:*'] });
  * ```
  */
-export function configure(options: Partial<GlobalLoggerConfig>): void {
-  const next: GlobalLoggerConfig = { ...globalConfig, ...options };
-  if (options.defaults !== undefined) {
-    next.defaults = { ...globalConfig.defaults, ...options.defaults };
-  }
-  globalConfig = next;
-  notifyConfigChange();
+export function configure(options: Parameters<typeof defaultStore.configure>[0]): void {
+  defaultStore.configure(options);
 }
 
-/**
- * Get current global configuration
- */
-export function getGlobalConfig(): Readonly<GlobalLoggerConfig> {
-  return globalConfig;
+/** Get current global configuration */
+export function getGlobalConfig(): ReturnType<typeof defaultStore.getConfig> {
+  return defaultStore.getConfig();
 }
 
-/**
- * Reset global configuration to defaults
- */
-/**
- * Reset global configuration to factory defaults.
- * Uses fresh arrays/objects so a previous session cannot mutate shared state.
- */
+/** Reset global configuration to factory defaults. */
 export function resetGlobalConfig(): void {
-  globalConfig = {
-    enabled: DEFAULT_CONFIG.enabled,
-    silent: DEFAULT_CONFIG.silent,
-    transports: [],
-    enabledNamespaces: ['*'],
-    disabledNamespaces: [],
-    defaults: {},
-  };
-  notifyConfigChange();
+  defaultStore.resetConfig();
 }
 
 /**
@@ -98,10 +86,7 @@ export function resetGlobalConfig(): void {
  * Per-logger and `defaults.minLevel` apply again.
  */
 export function clearGlobalLevel(): void {
-  if ('minLevel' in globalConfig) {
-    delete globalConfig.minLevel;
-  }
-  notifyConfigChange();
+  defaultStore.clearGlobalLevel();
 }
 
 /**
@@ -114,16 +99,12 @@ export function clearGlobalLevel(): void {
  * ```
  */
 export function disableLogging(): void {
-  globalConfig.enabled = false;
-  notifyConfigChange();
+  defaultStore.disableLogging();
 }
 
-/**
- * Enable logging globally
- */
+/** Enable logging globally */
 export function enableLogging(): void {
-  globalConfig.enabled = true;
-  notifyConfigChange();
+  defaultStore.enableLogging();
 }
 
 /**
@@ -136,8 +117,7 @@ export function enableLogging(): void {
  * ```
  */
 export function setGlobalLevel(level: LogLevel): void {
-  globalConfig.minLevel = level;
-  notifyConfigChange();
+  defaultStore.setGlobalLevel(level);
 }
 
 /**
@@ -148,24 +128,17 @@ export function setGlobalLevel(level: LogLevel): void {
  * import { addGlobalTransport } from '@nextrush/log';
  *
  * addGlobalTransport((entry) => {
- *   fetch('/api/logs', {
- *     method: 'POST',
- *     body: JSON.stringify(entry)
- *   });
+ *   fetch('/api/logs', { method: 'POST', body: JSON.stringify(entry) });
  * });
  * ```
  */
 export function addGlobalTransport(transport: LogTransport): void {
-  globalConfig.transports.push(transport);
-  notifyConfigChange();
+  defaultStore.addGlobalTransport(transport);
 }
 
-/**
- * Remove all global transports
- */
+/** Remove all global transports */
 export function clearGlobalTransports(): void {
-  globalConfig.transports = [];
-  notifyConfigChange();
+  defaultStore.clearGlobalTransports();
 }
 
 /**
@@ -174,17 +147,11 @@ export function clearGlobalTransports(): void {
  * @example
  * ```ts
  * import { enableNamespaces } from '@nextrush/log';
- *
- * // Only log from api and auth modules
  * enableNamespaces(['api:*', 'auth:*']);
- *
- * // Log everything
- * enableNamespaces(['*']);
  * ```
  */
 export function enableNamespaces(patterns: string[]): void {
-  globalConfig.enabledNamespaces = patterns;
-  notifyConfigChange();
+  defaultStore.enableNamespaces(patterns);
 }
 
 /**
@@ -193,128 +160,27 @@ export function enableNamespaces(patterns: string[]): void {
  * @example
  * ```ts
  * import { disableNamespaces } from '@nextrush/log';
- *
- * // Disable verbose modules
  * disableNamespaces(['verbose:*', 'debug:*']);
  * ```
  */
 export function disableNamespaces(patterns: string[]): void {
-  globalConfig.disabledNamespaces = patterns;
-  notifyConfigChange();
+  defaultStore.disableNamespaces(patterns);
 }
 
-/**
- * Check if a namespace is enabled based on global config
- */
+/** Check if a namespace is enabled based on global config */
 export function isNamespaceEnabled(namespace: string): boolean {
-  if (!globalConfig.enabled) return false;
-
-  // Check disabled patterns first (higher priority)
-  for (const pattern of globalConfig.disabledNamespaces) {
-    if (matchNamespace(namespace, pattern)) return false;
-  }
-
-  // Check enabled patterns
-  for (const pattern of globalConfig.enabledNamespaces) {
-    if (matchNamespace(namespace, pattern)) return true;
-  }
-
-  // Default: if no patterns match, check if '*' is in enabled
-  return globalConfig.enabledNamespaces.includes('*');
+  return defaultStore.isNamespaceEnabled(namespace);
 }
 
-/**
- * Match namespace against a pattern
- * Supports wildcards: 'api:*' matches 'api:users', 'api:auth:login'
- */
-const patternCache = new Map<string, RegExp>();
-const MAX_PATTERN_LENGTH = 100;
-const MAX_WILDCARDS = 10;
-
-function matchNamespace(namespace: string, pattern: string): boolean {
-  if (pattern === '*') return true;
-  if (pattern === namespace) return true;
-
-  // Validate pattern complexity to prevent ReDoS
-  if (pattern.length > MAX_PATTERN_LENGTH || pattern.split('*').length > MAX_WILDCARDS) {
-    return false;
-  }
-
-  // Check cache first
-  let regex = patternCache.get(pattern);
-  if (!regex) {
-    // Convert pattern to regex: 'api:*' -> /^api:.*$/
-    const regexPattern = pattern
-      .replace(/[.+^${}()|[\]\\]/g, '\\$&') // Escape special regex chars
-      .replace(/\*/g, '.*'); // Convert * to .*
-
-    regex = new RegExp(`^${regexPattern}$`);
-    patternCache.set(pattern, regex);
-  }
-
-  return regex.test(namespace);
-}
-
-/**
- * Subscribe to config changes
- */
+/** Subscribe to config changes */
 export function onConfigChange(listener: () => void): () => void {
-  configChangeListeners.add(listener);
-  return () => {
-    configChangeListeners.delete(listener);
-  };
-}
-
-function notifyConfigChange(): void {
-  for (const listener of configChangeListeners) {
-    try {
-      listener();
-    } catch {
-      // Ignore listener errors
-    }
-  }
+  return defaultStore.onConfigChange(listener);
 }
 
 /**
- * Auto-configure from environment
+ * Auto-configure from environment.
  * Reads `LOG_*` (and `NEXT_PUBLIC_*` / `VITE_*` aliases) plus `NODE_ENV`.
  */
 export function configureFromEnv(getEnv: (name: string) => string | undefined): void {
-  const logLevel =
-    getEnv('LOG_LEVEL') ??
-    getEnv('NEXT_PUBLIC_LOG_LEVEL') ??
-    getEnv('VITE_LOG_LEVEL');
-  const logEnabled =
-    getEnv('LOG_ENABLED') ??
-    getEnv('NEXT_PUBLIC_LOG_ENABLED') ??
-    getEnv('VITE_LOG_ENABLED');
-  const logNamespaces = getEnv('LOG_NAMESPACES') ?? getEnv('NEXT_PUBLIC_LOG_NAMESPACES');
-  const nodeEnv = getEnv('NODE_ENV');
-
-  if (logLevel) {
-    const validLevels = ['trace', 'debug', 'info', 'warn', 'error', 'fatal'];
-    if (validLevels.includes(logLevel)) {
-      globalConfig.minLevel = logLevel as LogLevel;
-    }
-  }
-
-  if (logEnabled === 'false' || logEnabled === '0') {
-    globalConfig.enabled = false;
-  }
-
-  if (logNamespaces) {
-    globalConfig.enabledNamespaces = logNamespaces.split(',').map(s => s.trim());
-  }
-
-  if (nodeEnv === 'production') {
-    globalConfig.env = 'production';
-    globalConfig.defaults.minLevel ??= 'info';
-    globalConfig.defaults.pretty ??= false;
-    globalConfig.defaults.redact ??= true;
-  } else if (nodeEnv === 'test') {
-    globalConfig.env = 'test';
-    globalConfig.defaults.silent ??= true;
-  }
-
-  notifyConfigChange();
+  defaultStore.configureFromEnv(getEnv);
 }

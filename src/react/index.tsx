@@ -35,10 +35,6 @@ import type { GlobalLoggerConfig } from '../core/index.js';
 import { configure, createLogger, Logger } from '../core/index.js';
 import type { LoggerOptions } from '../types/index.js';
 
-// ============================================================================
-// Context
-// ============================================================================
-
 interface LoggerContextValue {
   logger: Logger;
   getLogger: (context: string) => Logger;
@@ -46,10 +42,6 @@ interface LoggerContextValue {
 
 const LoggerContext = createContext<LoggerContextValue | null>(null);
 LoggerContext.displayName = 'LoggerContext';
-
-// ============================================================================
-// Provider
-// ============================================================================
 
 export interface LoggerProviderProps {
   /** Root context name (default: 'app') */
@@ -118,10 +110,6 @@ export function LoggerProvider(props: LoggerProviderProps): ReactNode {
   return createElement(LoggerContext.Provider, { value }, children);
 }
 
-// ============================================================================
-// Hooks
-// ============================================================================
-
 /**
  * Get a logger instance from context or create a standalone one
  *
@@ -174,10 +162,6 @@ export function useLogLifecycle(componentName: string): void {
     return () => { logger.debug('unmounting'); };
   }, [logger]);
 }
-
-// ============================================================================
-// Error Boundary
-// ============================================================================
 
 export interface LogErrorBoundaryProps {
   children: ReactNode;
@@ -240,10 +224,6 @@ export class LogErrorBoundary extends Component<LogErrorBoundaryProps, LogErrorB
   }
 }
 
-// ============================================================================
-// HOC (for class components)
-// ============================================================================
-
 export interface WithLoggerProps {
   logger: Logger;
 }
@@ -272,10 +252,6 @@ export function withLogger<P extends WithLoggerProps>(
     return WithLogger;
   };
 }
-
-// ============================================================================
-// Re-exports
-// ============================================================================
 
 export {
     configure,

@@ -11,6 +11,7 @@ import {
     createPredicateTransport,
 } from '../src/transport/index.js';
 import type { LogEntry } from '../src/types/index.js';
+import { getConsoleMethod } from '../src/utils/console-method.js';
 
 function createMockEntry(overrides: Partial<LogEntry> = {}): LogEntry {
   return {
@@ -149,6 +150,36 @@ describe('createBatchTransport', () => {
     vi.useFakeTimers();
   });
 
+  it('should invoke onError with the exact error and exact entries that failed to flush, exactly once, after retries are exhausted (SAFE-9 escape hatch)', async () => {
+    const onError = vi.fn();
+    const flushError = new Error('Datadog unreachable');
+    const flushFn = vi.fn().mockRejectedValue(flushError);
+
+    const { transport, flush, destroy } = createBatchTransport(flushFn, {
+      batchSize: 100,
+      maxRetries: 3,
+      onError,
+    });
+
+    const entryOne = createMockEntry({ message: 'one' });
+    const entryTwo = createMockEntry({ message: 'two' });
+    void transport(entryOne);
+    void transport(entryTwo);
+
+    vi.useRealTimers();
+    await flush();
+
+    // Fires exactly once — not once per failed retry attempt.
+    expect(onError).toHaveBeenCalledTimes(1);
+    // Fires with the same error instance that flushFn threw.
+    expect(onError).toHaveBeenCalledWith(flushError, [entryOne, entryTwo]);
+    // flushFn was retried maxRetries times before giving up.
+    expect(flushFn).toHaveBeenCalledTimes(3);
+
+    destroy();
+    vi.useFakeTimers();
+  });
+
   it('should clean up on destroy', async () => {
     const flushFn = vi.fn().mockResolvedValue(undefined);
     const { transport, destroy } = createBatchTransport(flushFn, {
@@ -283,5 +314,42 @@ describe('createConsoleTransport', () => {
 
     transport(createMockEntry({ level: 'error' }));
     expect(console.error).toHaveBeenCalled();
+  });
+
+  it.each([
+    ['trace', 'log'],
+    ['debug', 'debug'],
+    ['info', 'info'],
+    ['warn', 'warn'],
+    ['error', 'error'],
+    ['fatal', 'error'],
+  ] as const)(
+    'should resolve %s to console.%s via the shared console-method resolver',
+    (level, method) => {
+      const spy = vi.spyOn(console, method).mockImplementation(noop);
+      const resolved = getConsoleMethod(level);
+      resolved('probe');
+      expect(spy).toHaveBeenCalledWith('probe');
+    },
+  );
+
+  // API-6 (known, documented limitation — not a bug fixed by this transport):
+  // `Logger` already calls `outputToConsole` unconditionally for every log
+  // call. `createConsoleTransport` writes to the console too, so adding it
+  // via `logger.addTransport(...)` double-logs. The root cause (the
+  // unconditional call inside `Logger`) lives in `src/core/logger.ts`, which
+  // is out of scope here — see the `@remarks` JSDoc on `createConsoleTransport`
+  // for the documented warning. This test records that the transport itself
+  // still writes to the console every time it is invoked (the behavior that
+  // makes it double-log when misused), so a future change to that behavior
+  // is caught rather than silently drifting further from the documented
+  // warning.
+  it('writes to the console on every invocation (documents the double-log footgun when misused as a Logger transport)', () => {
+    const transport = createConsoleTransport({ pretty: false });
+
+    transport(createMockEntry({ level: 'info' }));
+    transport(createMockEntry({ level: 'info' }));
+
+    expect(console.info).toHaveBeenCalledTimes(2);
   });
 });

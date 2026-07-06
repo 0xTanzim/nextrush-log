@@ -13,6 +13,12 @@
  * - 🔌 Pluggable transports for custom log destinations
  * - ⚡ Zero dependencies, tree-shakeable
  *
+ * This is the MINIMAL public surface (see REPORT.md API-1..4): internal
+ * plumbing (serialization/redaction/runtime/formatting helpers), redundant
+ * logger-acquisition aliases, and overlapping config/transport variants
+ * have been removed. Everything here is something an application actually
+ * needs to import.
+ *
  * @example
  * ```ts
  * // Simplest usage - just import and use
@@ -38,10 +44,6 @@
  * @packageDocumentation
  */
 
-// ============================================================================
-// Type Exports
-// ============================================================================
-
 export type {
     BatchTransport,
     BatchTransportOptions,
@@ -58,48 +60,15 @@ export type {
     Timer
 } from './types/index.js';
 
-// ============================================================================
-// Core Exports
-// ============================================================================
+export type { AsyncLogContext } from './context/index.js';
+export type { GlobalLoggerConfig, Logger } from './core/index.js';
+export type { NamespaceRateLimits, RateLimitOptions, RateLimitStats } from './transport/index.js';
 
-export {
-    addGlobalTransport,
-    clearGlobalLevel,
-    clearGlobalTransports,
-    compareLevels,
-    configure,
-    configureFromEnv,
-    createLogger,
-    disableLogging,
-    disableNamespaces,
-    enableLogging,
-    enableNamespaces,
-    getGlobalConfig,
-    isNamespaceEnabled,
-    isValidLogLevel,
-    LOG_LEVEL_PRIORITY,
-    LOG_LEVELS,
-    Logger,
-    logger,
-    onConfigChange,
-    parseLogLevel,
-    resetGlobalConfig,
-    scopedLogger,
-    setGlobalLevel,
-    shouldLog,
-    stricterMinLevel
-} from './core/index.js';
-
-export type { GlobalLoggerConfig } from './core/index.js';
-
-// ============================================================================
-// Simple Default Export - Easiest DX
-// ============================================================================
-
-import { logger as defaultLogger } from './core/index.js';
+import { createLogger } from './core/index.js';
+export { addGlobalTransport, configure, createLogger, disableLogging } from './core/index.js';
 
 /**
- * Default logger instance for the simplest usage
+ * Default logger instance for the simplest usage.
  *
  * @example
  * ```ts
@@ -110,83 +79,9 @@ import { logger as defaultLogger } from './core/index.js';
  * log.debug('Debug info', { userId: 123 });
  * ```
  */
-export const log = defaultLogger;
+export const log = createLogger('app');
 
-// ============================================================================
-// Transport Exports
-// ============================================================================
+export { createBatchTransport, createFilteredTransport, createRateLimitedTransport } from './transport/index.js';
 
-export {
-    createBatchTransport,
-    createConsoleTransport,
-    createFilteredTransport, createNamespaceRateLimitedTransport, createPredicateTransport,
-    createRateLimitedTransport
-} from './transport/index.js';
-
-export type {
-    NamespaceRateLimits, RateLimitOptions,
-    RateLimitStats
-} from './transport/index.js';
-
-// ============================================================================
-// Formatter Exports
-// ============================================================================
-
-export {
-    formatJSON,
-    formatPrettyJSON,
-    formatPrettyTerminal
-} from './formatter/index.js';
-
-// ============================================================================
-// Serializer Exports
-// ============================================================================
-
-export {
-    containsSensitivePattern,
-    DEFAULT_SENSITIVE_KEYS,
-    isError,
-    mergeSensitiveKeys,
-    redactSensitiveValues,
-    safeSerialize,
-    sanitizeContext,
-    serializeError,
-    shouldRedact
-} from './serializer/index.js';
-
-// ============================================================================
-// Runtime Exports
-// ============================================================================
-
-export {
-    detectRuntime,
-    getEnvVar,
-    getProcessId,
-    getRuntime,
-    isProductionBuild
-} from './runtime/index.js';
-
-// ============================================================================
-// Utility Exports
-// ============================================================================
-
-export {
-    formatPrettyTimestamp,
-    formatTimestamp,
-    getTime
-} from './utils/index.js';
-
-// ============================================================================
-// Context Exports (AsyncLocalStorage-based context propagation)
-// ============================================================================
-
-export {
-    createContextMiddleware,
-    getAsyncContext,
-    getContextCorrelationId,
-    getContextMetadata,
-    isAsyncContextAvailable,
-    runWithContext
-} from './context/index.js';
-
-export type { AsyncLogContext } from './context/index.js';
+// AsyncLocalStorage-based context propagation, with a safe fallback where ALS is unavailable.
+export { createContextMiddleware, getAsyncContext, runWithContext } from './context/index.js';

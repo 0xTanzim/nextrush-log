@@ -16,6 +16,7 @@
  */
 
 import type { ILogger, LogContext, LogLevel, LogTransport, Timer } from '../types/index.js';
+import { parseLogArgs } from '../core/parse-log-args.js';
 
 /** Recorded log call */
 export interface LogCall {
@@ -76,43 +77,15 @@ export function createMockLogger(context = 'mock'): MockLogger {
     fatal: [],
   };
 
-  function parseArgs(args: unknown[]): { message: string; data?: LogContext; error?: Error } {
-    let message = '';
-    let data: LogContext | undefined;
-    let error: Error | undefined;
-
-    for (const arg of args) {
-      if (arg instanceof Error) {
-        error = arg;
-        if (!message) message = arg.message;
-      } else if (typeof arg === 'string') {
-        message = message ? `${message} ${arg}` : arg;
-      } else if (arg !== null && typeof arg === 'object') {
-        data = { ...data, ...(arg as LogContext) };
-      }
-    }
-
-    const result: { message: string; data?: LogContext; error?: Error } = {
-      message: message || 'Empty log',
-    };
-    if (data !== undefined) {
-      result.data = data;
-    }
-    if (error !== undefined) {
-      result.error = error;
-    }
-    return result;
-  }
-
   function recordCall(level: LogLevel, args: unknown[]): void {
-    const parsed = parseArgs(args);
+    const parsed = parseLogArgs(args);
     const call: LogCall = {
       level,
       args,
       message: parsed.message,
       timestamp: new Date(),
     };
-    if (parsed.data !== undefined) {
+    if (Object.keys(parsed.data).length > 0) {
       call.data = parsed.data;
     }
     if (parsed.error !== undefined) {

@@ -1,8 +1,10 @@
 /**
- * Async context propagation for automatic correlation ID and metadata tracking
+ * Async context propagation for automatic correlation ID and metadata tracking.
  *
- * Uses AsyncLocalStorage (Node.js) or fallback for other runtimes to automatically
- * propagate context across async boundaries without manual passing.
+ * Uses AsyncLocalStorage (Node.js/Bun/Deno) when available; falls back to an
+ * explicit context stack (`./fallback-stack.js`) on runtimes with no
+ * AsyncLocalStorage at all (real browsers, some edge runtimes) — see that module
+ * for why a stack, not a single shared value, is required for correctness.
  *
  * @example
  * ```ts
@@ -16,52 +18,23 @@
  * ```
  */
 
+import {
+    forceAsyncLocalStorageUnavailableForTesting,
+    getAsyncLocalStorage,
+} from './async-local-storage.js';
+import {
+    getFallbackContext,
+    resetFallbackContextForTesting,
+    runWithFallbackContext,
+} from './fallback-stack.js';
+import { type AsyncLogContext, mergeContext } from './types.js';
 import type { LogContext } from '../types/index.js';
 
-/** Context data stored in async local storage */
-export interface AsyncLogContext {
-  correlationId?: string;
-  metadata?: LogContext;
-}
-
-// Type for AsyncLocalStorage - we check at runtime if available
-interface AsyncLocalStorageType<T> {
-  getStore(): T | undefined;
-  run<R>(store: T, callback: () => R): R;
-  enterWith(store: T): void;
-}
-
-/** Singleton AsyncLocalStorage instance (Node.js only) */
-let asyncLocalStorage: AsyncLocalStorageType<AsyncLogContext> | null = null;
-
-/** Fallback context for non-Node environments */
-let fallbackContext: AsyncLogContext | null = null;
+export type { AsyncLogContext } from './types.js';
 
 /**
- * Initialize AsyncLocalStorage if available
- * Called lazily on first use
- */
-function getAsyncLocalStorage(): AsyncLocalStorageType<AsyncLogContext> | null {
-  if (asyncLocalStorage !== null) return asyncLocalStorage;
-
-  try {
-    // CJS only; unavailable in edge/browser bundles (caught).
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const asyncHooks = require('node:async_hooks') as {
-      AsyncLocalStorage: new () => AsyncLocalStorageType<AsyncLogContext>;
-    };
-    asyncLocalStorage = new asyncHooks.AsyncLocalStorage();
-    return asyncLocalStorage;
-  } catch {
-    // AsyncLocalStorage not available (browser, edge, etc.)
-  }
-
-  return null;
-}
-
-/**
- * Run a function with async context
- * Context is automatically available to all loggers within the callback
+ * Run a function with async context.
+ * Context is automatically available to all loggers within the callback.
  *
  * @example
  * ```ts
@@ -79,83 +52,43 @@ export function runWithContext<T>(
   const als = getAsyncLocalStorage();
 
   if (als) {
-    // Node.js with AsyncLocalStorage
-    const existingContext = als.getStore();
-    const newCorrelationId = context.correlationId ?? existingContext?.correlationId;
-    const mergedContext: AsyncLogContext = {
-      metadata: { ...existingContext?.metadata, ...context.metadata },
-    };
-    if (newCorrelationId !== undefined) {
-      mergedContext.correlationId = newCorrelationId;
-    }
+    const mergedContext = mergeContext(als.getStore(), context);
     return als.run(mergedContext, callback);
   }
 
-  // Fallback for non-Node environments
-  const previousContext = fallbackContext;
-  const newCorrelationId = context.correlationId ?? previousContext?.correlationId;
-  const newFallbackContext: AsyncLogContext = {
-    metadata: { ...previousContext?.metadata, ...context.metadata },
-  };
-  if (newCorrelationId !== undefined) {
-    newFallbackContext.correlationId = newCorrelationId;
-  }
-  fallbackContext = newFallbackContext;
-
-  try {
-    const result = callback();
-    if (result instanceof Promise) {
-      return result.finally(() => {
-        fallbackContext = previousContext;
-      });
-    }
-    fallbackContext = previousContext;
-    return result;
-  } catch (error) {
-    fallbackContext = previousContext;
-    throw error;
-  }
+  return runWithFallbackContext(context, callback);
 }
 
 /**
- * Get the current async context
- * Returns undefined if not within a runWithContext call
+ * Get the current async context.
+ * Returns undefined if not within a runWithContext call.
  */
 export function getAsyncContext(): AsyncLogContext | undefined {
   const als = getAsyncLocalStorage();
-
-  if (als) {
-    return als.getStore();
-  }
-
-  return fallbackContext ?? undefined;
+  return als ? als.getStore() : getFallbackContext();
 }
 
-/**
- * Get the current correlation ID from async context
- */
+/** Get the current correlation ID from async context. */
 export function getContextCorrelationId(): string | undefined {
   return getAsyncContext()?.correlationId;
 }
 
-/**
- * Get the current metadata from async context
- */
+/** Get the current metadata from async context. */
 export function getContextMetadata(): LogContext | undefined {
   return getAsyncContext()?.metadata;
 }
 
 /**
- * Check if async context is available
- * Returns true if AsyncLocalStorage is available (Node.js)
+ * Check if async context is available.
+ * Returns true if AsyncLocalStorage is available (Node.js/Bun/Deno).
  */
 export function isAsyncContextAvailable(): boolean {
   return getAsyncLocalStorage() !== null;
 }
 
 /**
- * Create a middleware function for Express/Koa-style frameworks
- * Automatically sets up async context for each request
+ * Create a middleware function for Express/Koa-style frameworks.
+ * Automatically sets up async context for each request.
  *
  * @example
  * ```ts
@@ -178,4 +111,22 @@ export function createContextMiddleware<TReq = unknown>(
       next();
     });
   };
+}
+
+/**
+ * Test-only seam: force `isAsyncContextAvailable()` to report AsyncLocalStorage as
+ * unavailable, forcing the fallback stack path deterministically on runtimes (like
+ * the Node test environment) where real AsyncLocalStorage is always present. Not
+ * exported from the package's public entry point.
+ */
+export function __forceAsyncContextFallbackForTesting(force: boolean): void {
+  forceAsyncLocalStorageUnavailableForTesting(force);
+}
+
+/**
+ * Test-only seam: clear all fallback-path bookkeeping. Not exported from the
+ * package's public entry point.
+ */
+export function __resetAsyncContextFallbackForTesting(): void {
+  resetFallbackContextForTesting();
 }

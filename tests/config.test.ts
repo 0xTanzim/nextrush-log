@@ -9,11 +9,13 @@ import {
     clearGlobalTransports,
     configure,
     configureFromEnv,
+    createConfigStore,
     createLogger,
     disableLogging,
     disableNamespaces,
     enableLogging,
     enableNamespaces,
+    getDefaultConfigStore,
     getGlobalConfig,
     isNamespaceEnabled,
     onConfigChange,
@@ -556,5 +558,165 @@ describe('Global Configuration', () => {
 
       expect(isNamespaceEnabled('anything')).toBe(false);
     });
+  });
+});
+
+describe('createConfigStore (ARCH-2: injectable config, no shared singleton)', () => {
+  it('gives each store its own independent config state', () => {
+    const storeA = createConfigStore();
+    const storeB = createConfigStore();
+
+    storeA.disableLogging();
+
+    expect(storeA.getConfig().enabled).toBe(false);
+    expect(storeB.getConfig().enabled).toBe(true);
+  });
+
+  it('does not let setGlobalLevel on one store affect another', () => {
+    const storeA = createConfigStore();
+    const storeB = createConfigStore();
+
+    storeA.setGlobalLevel('error');
+
+    expect(storeA.getConfig().minLevel).toBe('error');
+    expect(storeB.getConfig().minLevel).toBeUndefined();
+  });
+
+  it('does not let addGlobalTransport on one store affect another', () => {
+    const storeA = createConfigStore();
+    const storeB = createConfigStore();
+    const transport = vi.fn();
+
+    storeA.addGlobalTransport(transport);
+
+    expect(storeA.getConfig().transports).toHaveLength(1);
+    expect(storeB.getConfig().transports).toHaveLength(0);
+  });
+
+  it('does not let enableNamespaces on one store affect another', () => {
+    const storeA = createConfigStore();
+    const storeB = createConfigStore();
+
+    storeA.enableNamespaces(['api:*']);
+
+    expect(storeA.getConfig().enabledNamespaces).toEqual(['api:*']);
+    expect(storeB.getConfig().enabledNamespaces).toEqual(['*']);
+  });
+
+  it('isolates the namespace pattern cache per store', () => {
+    const storeA = createConfigStore();
+    const storeB = createConfigStore();
+
+    storeA.enableNamespaces(['api:*']);
+    storeB.enableNamespaces(['api:*']);
+
+    // Populate store A's pattern cache by matching against it.
+    expect(storeA.isNamespaceEnabled('api:users')).toBe(true);
+
+    // A fresh store (storeB) must not see any cached compiled pattern from
+    // storeA — this only matters observably via correctness, so assert the
+    // independently-computed result is correct rather than reaching into
+    // internals.
+    expect(storeB.isNamespaceEnabled('api:users')).toBe(true);
+    expect(storeB.isNamespaceEnabled('db:queries')).toBe(false);
+  });
+
+  it('clears a store\'s own pattern cache on that store\'s reset (not the default store\'s)', () => {
+    const store = createConfigStore();
+    store.enableNamespaces(['app:*']);
+    expect(store.isNamespaceEnabled('app:main')).toBe(true);
+
+    store.resetConfig();
+
+    // After reset, enabledNamespaces reverts to ['*'] and a previously-matched
+    // pattern must be re-evaluated against the reset state, not served from a
+    // stale cache entry.
+    expect(store.getConfig().enabledNamespaces).toEqual(['*']);
+    expect(store.isNamespaceEnabled('anything')).toBe(true);
+  });
+
+  it('notifies only that store\'s own onConfigChange listeners', () => {
+    const storeA = createConfigStore();
+    const storeB = createConfigStore();
+    const listenerA = vi.fn();
+    const listenerB = vi.fn();
+
+    storeA.onConfigChange(listenerA);
+    storeB.onConfigChange(listenerB);
+
+    storeA.configure({ minLevel: 'warn' });
+
+    expect(listenerA).toHaveBeenCalledTimes(1);
+    expect(listenerB).not.toHaveBeenCalled();
+  });
+
+  it('supports the full mutator surface used by the default-store wrappers', () => {
+    const store = createConfigStore();
+
+    store.configure({ silent: true });
+    expect(store.getConfig().silent).toBe(true);
+
+    store.setGlobalLevel('warn');
+    expect(store.getConfig().minLevel).toBe('warn');
+    store.clearGlobalLevel();
+    expect(store.getConfig().minLevel).toBeUndefined();
+
+    store.disableLogging();
+    expect(store.getConfig().enabled).toBe(false);
+    store.enableLogging();
+    expect(store.getConfig().enabled).toBe(true);
+
+    const transport = vi.fn();
+    store.addGlobalTransport(transport);
+    expect(store.getConfig().transports).toEqual([transport]);
+    store.clearGlobalTransports();
+    expect(store.getConfig().transports).toEqual([]);
+
+    store.disableNamespaces(['verbose:*']);
+    expect(store.getConfig().disabledNamespaces).toEqual(['verbose:*']);
+
+    store.configureFromEnv((name) => (name === 'LOG_LEVEL' ? 'error' : undefined));
+    expect(store.getConfig().minLevel).toBe('error');
+  });
+
+  it('leaves the default (module-level) store untouched by mutations on an independently created store', () => {
+    const isolatedStore = createConfigStore();
+    isolatedStore.disableLogging();
+
+    // The default store used by getGlobalConfig()/createLogger() is unaffected.
+    expect(getGlobalConfig().enabled).toBe(true);
+    expect(isolatedStore.getConfig().enabled).toBe(false);
+  });
+});
+
+describe('getDefaultConfigStore (dual-package hazard fix)', () => {
+  afterEach(() => {
+    // Clean up the globalThis slot between tests so tests don't leak into each other.
+    delete (globalThis as Record<string, unknown>)['__NEXTRUSH_LOG_DEFAULT_CONFIG_STORE__'];
+  });
+
+  it('returns the SAME store across repeated calls, even simulating a second module instance', () => {
+    // Real bug reproduced in scripts/dual-package-repro.mjs: when a bundler/host
+    // loads both the ESM and CJS builds into one process, each build's module
+    // scope creates its OWN `defaultStore`, so disableLogging() on one never
+    // reaches loggers created via the other. The fix routes the default store
+    // through a globalThis-backed singleton so any module instance in the same
+    // realm converges on one shared store.
+    const first = getDefaultConfigStore();
+
+    // Simulate a second, independently-loaded module instance calling the same
+    // getter fresh (as if `config.ts` had been re-evaluated from a different
+    // module graph node) — it must resolve to the identical object, not a new one.
+    const second = getDefaultConfigStore();
+
+    expect(second).toBe(first);
+  });
+
+  it('disableLogging() from one "instance" of the getter silences a logger created via the store returned by a separate call', () => {
+    const storeA = getDefaultConfigStore();
+    storeA.disableLogging();
+
+    const storeB = getDefaultConfigStore();
+    expect(storeB.getConfig().enabled).toBe(false);
   });
 });

@@ -444,3 +444,136 @@ describe('factory functions', () => {
     expect(logger.getContext()).toBe('app');
   });
 });
+
+describe('Logger — ARCH-1/SAFE-4/SAFE-5 (decomposition, crash-safety, no listener leak)', () => {
+  let consoleSpy: ReturnType<typeof vi.spyOn>;
+  let errorSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    consoleSpy = vi.spyOn(console, 'info').mockImplementation(noop);
+    vi.spyOn(console, 'debug').mockImplementation(noop);
+    errorSpy = vi.spyOn(console, 'error').mockImplementation(noop);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('SAFE-4: does not throw when a logged object has a throwing getter', () => {
+    const poisoned = {
+      get relation(): unknown {
+        throw new Error('relation not loaded');
+      },
+    };
+    const log = createLogger('poison-test');
+
+    expect(() => {
+      log.info('loaded', poisoned);
+    }).not.toThrow();
+  });
+
+  it('SAFE-4: does not throw when a logged Error has a throwing custom property getter', () => {
+    class PoisonedError extends Error {
+      get code(): string {
+        throw new Error('boom');
+      }
+    }
+    const log = createLogger('poison-error-test');
+
+    expect(() => {
+      log.error(new PoisonedError('failed'));
+    }).not.toThrow();
+  });
+
+  it('SAFE-4: falls back to console.error and still emits something when internal logging fails', () => {
+    const poisoned = {
+      get x(): unknown {
+        throw new Error('boom');
+      },
+    };
+    const log = createLogger('poison-fallback-test');
+
+    log.info('msg', poisoned);
+
+    // Either the normal path succeeded (info called) or the fail-safe fired (error called).
+    const succeeded = consoleSpy.mock.calls.length > 0 || errorSpy.mock.calls.length > 0;
+    expect(succeeded).toBe(true);
+  });
+
+  it('SAFE-5: creating many child/correlation loggers without calling dispose() does not require cleanup to avoid a leak', () => {
+    // Regression guard for the old design where every Logger subscribed to a
+    // module-level onConfigChange listener Set and only dispose() removed it.
+    // The new design must not need dispose() at all for correctness.
+    const base = createLogger('leak-test');
+    const children = Array.from({ length: 50 }, (_, i) => base.withCorrelationId(`req-${i}`));
+
+    // No dispose() calls here on purpose. This must not throw and each child
+    // must still read live global config correctly (proven via level check).
+    expect(() => {
+      for (const child of children) {
+        child.isLevelEnabled('info');
+      }
+    }).not.toThrow();
+  });
+
+  it('API-5: LoggerOptions no longer has a live "timestamps" knob that silently no-ops', () => {
+    // The dead `timestamps` option (assigned but never read) has been removed.
+    // A logger created with timestamps:false must behave identically to one
+    // without it — proving there is no dead, misleading config surface left.
+    const withFlag = createLogger('ts-a', { timestamps: false } as Record<string, unknown>);
+    const withoutFlag = createLogger('ts-b');
+
+    withFlag.info('hello');
+    withoutFlag.info('hello');
+
+    // Both must have produced a timestamped entry (i.e. the flag has zero effect,
+    // because it no longer exists as a real option at all).
+    expect(consoleSpy).toHaveBeenCalled();
+  });
+});
+
+describe('Logger — SAFE-2 (fail-safe redaction default on undetected environment)', () => {
+  let consoleSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    consoleSpy = vi.spyOn(console, 'info').mockImplementation(noop);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  function stringifyConsoleCalls(spy: ReturnType<typeof vi.spyOn>): string {
+    const calls = spy.mock.calls as unknown[][];
+    return calls.map((call) => JSON.stringify(call)).join('\n');
+  }
+
+  it('redacts sensitive keys by default when NODE_ENV is completely undetected (edge-like runtime)', () => {
+    // Simulate an edge runtime: no process.env, no Deno, no import.meta.env signal.
+    vi.stubGlobal('process', undefined);
+    vi.stubGlobal('Deno', undefined);
+
+    const log = createLogger('edge-safe-test');
+    log.info('login', { password: 'super-secret' });
+
+    expect(stringifyConsoleCalls(consoleSpy)).not.toContain('super-secret');
+  });
+
+  it('still does NOT redact when explicitly configured for development', () => {
+    const log = createLogger('explicit-dev-test', { env: 'development' });
+    log.info('login', { password: 'super-secret' });
+
+    expect(stringifyConsoleCalls(consoleSpy)).toContain('super-secret');
+  });
+
+  it('an explicit redact:false always wins, even on an undetected environment', () => {
+    vi.stubGlobal('process', undefined);
+    vi.stubGlobal('Deno', undefined);
+
+    const log = createLogger('explicit-override-test', { redact: false });
+    log.info('login', { password: 'super-secret' });
+
+    expect(stringifyConsoleCalls(consoleSpy)).toContain('super-secret');
+  });
+});

@@ -4,13 +4,21 @@
  */
 
 import type { SerializationOptions } from '../types/index.js';
-import { REDACTED_PLACEHOLDER, redactSensitiveValues, shouldRedact } from './redaction.js';
+import {
+  isAsyncGenerator,
+  isGenerator,
+  serializeArray,
+  serializeMap,
+  serializePlainObject,
+  serializeSet,
+} from './collections.js';
+import { serializeError } from './error.js';
+import { redactSensitiveValues } from './redaction.js';
 
 /** Placeholder messages for special cases */
 const PLACEHOLDERS = {
   CIRCULAR: '[Circular Reference]',
   MAX_DEPTH: '[Max Depth Reached]',
-  UNSERIALIZABLE: '[Unserializable]',
   WEAK_MAP: '[WeakMap]',
   WEAK_SET: '[WeakSet]',
   WEAK_REF: '[WeakRef]',
@@ -29,6 +37,7 @@ export function createSerializationOptions(
     maxDepth: 10,
     maxStringLength: 10000,
     maxArrayLength: 100,
+    maxKeys: 100,
     sensitiveKeys: [],
     seen: new WeakSet(),
     depth: 0,
@@ -105,15 +114,7 @@ function serializeObject(
   value: object,
   options: SerializationOptions,
 ): unknown {
-  const {
-    maxDepth,
-    maxStringLength,
-    maxArrayLength,
-    sensitiveKeys,
-    seen,
-    depth,
-    redact,
-  } = options;
+  const { maxDepth, seen, depth } = options;
 
   // Circular reference detection
   if (seen.has(value)) {
@@ -125,267 +126,115 @@ function serializeObject(
     return PLACEHOLDERS.MAX_DEPTH;
   }
 
-  // Track this object
+  // Track this object for the duration of its own subtree only (ancestry-
+  // scoped, not global) — removed in the `finally` below once every branch
+  // that may recurse into `value`'s children has finished, so a merely
+  // repeated (non-circular) reference isn't mistaken for a true cycle.
   seen.add(value);
 
-  const nextOptions: SerializationOptions = {
-    maxDepth,
-    maxStringLength,
-    maxArrayLength,
-    sensitiveKeys,
-    seen,
-    depth: depth + 1,
-    redact,
+  try {
+    return serializeKnownObjectType(value, nextOptionsFor(options));
+  } finally {
+    seen.delete(value);
+  }
+}
+
+/**
+ * Build the options passed one level deeper into an object's subtree.
+ */
+function nextOptionsFor(options: SerializationOptions): SerializationOptions {
+  return {
+    maxDepth: options.maxDepth,
+    maxStringLength: options.maxStringLength,
+    maxArrayLength: options.maxArrayLength,
+    maxKeys: options.maxKeys,
+    sensitiveKeys: options.sensitiveKeys,
+    seen: options.seen,
+    depth: options.depth + 1,
+    redact: options.redact,
   };
+}
 
-  // Handle Error objects - delegate to error serializer
-  if (value instanceof Error) {
-    return serializeErrorInline(value, nextOptions);
-  }
+/**
+ * Ordered [predicate, serializer] handler table for known object types.
+ * Iterated once in order — first matching predicate wins — replacing a long
+ * sequential instanceof-ladder (QUAL-1) with a data-driven dispatch that's
+ * easier to extend and lowers cyclomatic complexity.
+ */
+const OBJECT_TYPE_HANDLERS: readonly (readonly [
+  predicate: (value: object) => boolean,
+  serialize: (value: object, options: SerializationOptions) => unknown,
+])[] = [
+  [(v) => v instanceof Error, (v, o) => serializeError(v as Error, o)],
+  [
+    (v) => v instanceof Date,
+    (v) => {
+      const date = v as Date;
+      return Number.isNaN(date.getTime()) ? 'Invalid Date' : date.toISOString();
+    },
+  ],
+  [(v) => v instanceof RegExp, (v) => (v as RegExp).toString()],
+  [
+    (v) => typeof URL !== 'undefined' && v instanceof URL,
+    (v) => (v as URL).toString(),
+  ],
+  [(v) => v instanceof Map, (v, o) => serializeMap(v as Map<unknown, unknown>, o)],
+  [(v) => v instanceof Set, (v, o) => serializeSet(v as Set<unknown>, o)],
+  [
+    (v) => typeof WeakMap !== 'undefined' && v instanceof WeakMap,
+    () => PLACEHOLDERS.WEAK_MAP,
+  ],
+  [
+    (v) => typeof WeakSet !== 'undefined' && v instanceof WeakSet,
+    () => PLACEHOLDERS.WEAK_SET,
+  ],
+  [
+    (v) => typeof WeakRef !== 'undefined' && v instanceof WeakRef,
+    () => PLACEHOLDERS.WEAK_REF,
+  ],
+  [
+    (v) => typeof ArrayBuffer !== 'undefined' && v instanceof ArrayBuffer,
+    (v) => `[ArrayBuffer: ${(v as ArrayBuffer).byteLength} bytes]`,
+  ],
+  [
+    (v) =>
+      typeof SharedArrayBuffer !== 'undefined' && v instanceof SharedArrayBuffer,
+    (v) => `[SharedArrayBuffer: ${(v as SharedArrayBuffer).byteLength} bytes]`,
+  ],
+  [
+    (v) => ArrayBuffer.isView(v),
+    (v) => {
+      const view = v as ArrayBufferView;
+      return `[${view.constructor.name}: ${view.byteLength} bytes]`;
+    },
+  ],
+  [(v) => v instanceof Promise, () => PLACEHOLDERS.PROMISE],
+  [(v) => isGenerator(v), () => PLACEHOLDERS.GENERATOR],
+  [(v) => isAsyncGenerator(v), () => PLACEHOLDERS.ASYNC_GENERATOR],
+  [
+    (v) => Array.isArray(v),
+    (v, o) => serializeArray(v as unknown[], o),
+  ],
+];
 
-  // Handle Date
-  if (value instanceof Date) {
-    if (Number.isNaN(value.getTime())) {
-      return 'Invalid Date';
+/**
+ * Dispatch a non-circular, within-depth object to its concrete serializer.
+ * Falls back to plain-object serialization when no known type matches (see
+ * DEAD-1: the Error branch previously duplicated a lossy inline copy to
+ * dodge a perceived circular import; error.ts and serialize.ts only call
+ * each other's exports inside function bodies, so the ESM live-binding
+ * cycle resolves fine).
+ */
+function serializeKnownObjectType(
+  value: object,
+  nextOptions: SerializationOptions,
+): unknown {
+  for (const [matches, serialize] of OBJECT_TYPE_HANDLERS) {
+    if (matches(value)) {
+      return serialize(value, nextOptions);
     }
-    return value.toISOString();
-  }
-
-  // Handle RegExp
-  if (value instanceof RegExp) {
-    return value.toString();
-  }
-
-  // Handle URL
-  if (typeof URL !== 'undefined' && value instanceof URL) {
-    return value.toString();
-  }
-
-  // Handle Map
-  if (value instanceof Map) {
-    return serializeMap(value, nextOptions);
-  }
-
-  // Handle Set
-  if (value instanceof Set) {
-    return serializeSet(value, nextOptions);
-  }
-
-  // Handle WeakMap, WeakSet, WeakRef
-  if (typeof WeakMap !== 'undefined' && value instanceof WeakMap) {
-    return PLACEHOLDERS.WEAK_MAP;
-  }
-  if (typeof WeakSet !== 'undefined' && value instanceof WeakSet) {
-    return PLACEHOLDERS.WEAK_SET;
-  }
-  if (typeof WeakRef !== 'undefined' && value instanceof WeakRef) {
-    return PLACEHOLDERS.WEAK_REF;
-  }
-
-  // Handle ArrayBuffer and TypedArrays
-  if (typeof ArrayBuffer !== 'undefined' && value instanceof ArrayBuffer) {
-    return `[ArrayBuffer: ${value.byteLength} bytes]`;
-  }
-
-  if (
-    typeof SharedArrayBuffer !== 'undefined' &&
-    value instanceof SharedArrayBuffer
-  ) {
-    return `[SharedArrayBuffer: ${value.byteLength} bytes]`;
-  }
-
-  if (ArrayBuffer.isView(value)) {
-    const view = value;
-    return `[${view.constructor.name}: ${view.byteLength} bytes]`;
-  }
-
-  // Handle Promise
-  if (value instanceof Promise) {
-    return PLACEHOLDERS.PROMISE;
-  }
-
-  // Handle Generator objects
-  if (isGenerator(value)) {
-    return PLACEHOLDERS.GENERATOR;
-  }
-
-  if (isAsyncGenerator(value)) {
-    return PLACEHOLDERS.ASYNC_GENERATOR;
-  }
-
-  // Handle Arrays
-  if (Array.isArray(value)) {
-    return serializeArray(value, nextOptions);
   }
 
   // Handle plain objects (including null prototype objects)
   return serializePlainObject(value, nextOptions);
-}
-
-/**
- * Inline error serialization to avoid circular import
- */
-function serializeErrorInline(
-  error: Error,
-  options: SerializationOptions,
-): Record<string, unknown> {
-  const result: Record<string, unknown> = {
-    name: error.name || 'Error',
-    message: error.message || 'Unknown error',
-  };
-
-  if (error.stack) {
-    result['stack'] = error.stack;
-  }
-
-  // Handle cause
-  if ('cause' in error && error.cause !== undefined) {
-    if (error.cause instanceof Error && options.depth < options.maxDepth) {
-      result['cause'] = serializeErrorInline(error.cause, {
-        ...options,
-        depth: options.depth + 1,
-      });
-    } else if (error.cause instanceof Error) {
-      result['cause'] = `[Error: ${error.cause.name}] ${error.cause.message}`;
-    } else {
-      result['cause'] = safeSerialize(error.cause, options);
-    }
-  }
-
-  return result;
-}
-
-/**
- * Serialize a Map
- */
-function serializeMap(map: Map<unknown, unknown>, options: SerializationOptions): Record<string, unknown> {
-  const entries: Record<string, unknown> = {};
-  let count = 0;
-
-  for (const [key, value] of map) {
-    if (count >= options.maxArrayLength) {
-      entries['...'] = `[${map.size - count} more entries]`;
-      break;
-    }
-
-    const keyStr = typeof key === 'string' ? key : String(safeSerialize(key, options));
-
-    if (options.redact && shouldRedact(keyStr, options.sensitiveKeys)) {
-      entries[keyStr] = REDACTED_PLACEHOLDER;
-    } else {
-      entries[keyStr] = safeSerialize(value, options);
-    }
-
-    count++;
-  }
-
-  return { __type: 'Map', size: map.size, entries };
-}
-
-/**
- * Serialize a Set
- */
-function serializeSet(set: Set<unknown>, options: SerializationOptions): Record<string, unknown> {
-  const items: unknown[] = [];
-  let count = 0;
-
-  for (const item of set) {
-    if (count >= options.maxArrayLength) {
-      items.push(`[${set.size - count} more items]`);
-      break;
-    }
-
-    items.push(safeSerialize(item, options));
-    count++;
-  }
-
-  return { __type: 'Set', size: set.size, items };
-}
-
-/**
- * Serialize an Array
- */
-function serializeArray(arr: unknown[], options: SerializationOptions): unknown[] {
-  const { maxArrayLength } = options;
-
-  if (arr.length > maxArrayLength) {
-    const serialized = arr
-      .slice(0, maxArrayLength)
-      .map((item) => safeSerialize(item, options));
-    serialized.push(`[${arr.length - maxArrayLength} more items]`);
-    return serialized;
-  }
-
-  return arr.map((item) => safeSerialize(item, options));
-}
-
-/**
- * Serialize a plain object
- */
-function serializePlainObject(
-  obj: object,
-  options: SerializationOptions,
-): Record<string, unknown> {
-  const serialized: Record<string, unknown> = {};
-
-  // Get own enumerable keys (handles null prototype objects)
-  let keys: string[];
-  try {
-    keys = Object.keys(obj);
-  } catch {
-    return { __error: PLACEHOLDERS.UNSERIALIZABLE };
-  }
-
-  for (const key of keys) {
-    try {
-      const value = (obj as Record<string, unknown>)[key];
-
-      if (options.redact && shouldRedact(key, options.sensitiveKeys)) {
-        serialized[key] = REDACTED_PLACEHOLDER;
-      } else {
-        serialized[key] = safeSerialize(value, options);
-      }
-    } catch {
-      serialized[key] = PLACEHOLDERS.UNSERIALIZABLE;
-    }
-  }
-
-  return serialized;
-}
-
-/**
- * Type guard for Generator objects
- */
-function isGenerator(value: unknown): boolean {
-  if (typeof value !== 'object' || value === null) return false;
-  const proto = Object.getPrototypeOf(value) as object | null;
-  if (!proto) return false;
-  const constructorObj = proto as { constructor?: { name?: string } };
-  const constructorName = constructorObj.constructor?.name;
-  if (
-    constructorName === 'Generator' ||
-    constructorName === 'GeneratorFunction'
-  ) {
-    return true;
-  }
-  const valueWithMethods = value as { next?: unknown; throw?: unknown };
-  return (
-    typeof valueWithMethods.next === 'function' &&
-    typeof valueWithMethods.throw === 'function'
-  );
-}
-
-/**
- * Type guard for AsyncGenerator objects
- */
-function isAsyncGenerator(value: unknown): boolean {
-  if (typeof value !== 'object' || value === null) return false;
-  const proto = Object.getPrototypeOf(value) as object | null;
-  if (!proto) return false;
-  const constructorObj = proto as { constructor?: { name?: string } };
-  const constructorName = constructorObj.constructor?.name;
-  return (
-    constructorName === 'AsyncGenerator' ||
-    constructorName === 'AsyncGeneratorFunction'
-  );
 }

@@ -5,6 +5,7 @@
 
 import type { LogEntry, LogLevel, SerializedError } from '../types/index.js';
 import { ANSI, getColors } from '../utils/colors.js';
+import { LEVEL_ICONS } from '../utils/level-icons.js';
 import { formatPrettyTimestamp } from '../utils/time.js';
 
 /** Level-specific colors */
@@ -17,15 +18,20 @@ const LEVEL_COLORS: Record<LogLevel, string> = {
   fatal: ANSI.bgRed + ANSI.white,
 };
 
-/** Level icons for visual distinction */
-const LEVEL_ICONS: Record<LogLevel, string> = {
-  trace: '🔍',
-  debug: '🐛',
-  info: 'ℹ️ ',
-  warn: '⚠️ ',
-  error: '❌',
-  fatal: '💀',
-};
+/**
+ * Levels whose icon renders one terminal column narrower (emoji ending in a
+ * variation selector) and needs a trailing space to keep columns aligned in
+ * a fixed-width terminal. Not part of the shared icon map — see level-icons.ts.
+ */
+const NARROW_TERMINAL_ICONS = new Set<LogLevel>(['info', 'warn']);
+
+/**
+ * Terminal-aligned icon for a level (shared glyph + local padding fixup).
+ */
+function terminalIcon(level: LogLevel): string {
+  const icon = LEVEL_ICONS[level];
+  return NARROW_TERMINAL_ICONS.has(level) ? `${icon} ` : icon;
+}
 
 /**
  * Pad log level to consistent width
@@ -35,12 +41,27 @@ function padLevel(level: LogLevel): string {
 }
 
 /**
+ * Strip control characters (newlines, carriage returns, tabs, ANSI escapes,
+ * and other C0/C1 control codes) from untrusted string content before it is
+ * embedded raw into terminal output. Without this, a message/value containing
+ * `\n` can forge fake extra log lines, and `\x1b[` ANSI sequences can hide or
+ * rewrite terminal output (log injection — see SAFE-6). Context strings already
+ * go through `sanitizeContext` in the serializer package; this is the
+ * formatter-local equivalent for `message` and data values, kept local to
+ * avoid a cross-package import.
+ */
+function stripControlChars(value: string): string {
+  // eslint-disable-next-line no-control-regex -- intentionally matching control chars
+  return value.replace(/[\r\n\t\x00-\x1F\x7F\x80-\x9F]/g, '');
+}
+
+/**
  * Format a log entry for terminal output
  */
 export function formatPrettyTerminal(entry: LogEntry, useColors: boolean): string {
   const c = getColors(useColors);
   const levelColor = useColors ? LEVEL_COLORS[entry.level] : '';
-  const icon = LEVEL_ICONS[entry.level];
+  const icon = terminalIcon(entry.level);
 
   const parts: string[] = [];
 
@@ -58,8 +79,8 @@ export function formatPrettyTerminal(entry: LogEntry, useColors: boolean): strin
     parts.push(`${c.dim}(${entry.correlationId})${c.reset}`);
   }
 
-  // Message
-  parts.push(`${c.bold}${entry.message}${c.reset}`);
+  // Message (sanitized — untrusted content must not forge lines or ANSI codes)
+  parts.push(`${c.bold}${stripControlChars(entry.message)}${c.reset}`);
 
   let output = parts.join(' ');
 
@@ -112,7 +133,7 @@ function formatValuePretty(value: unknown, useColors: boolean): string {
 
   const type = typeof value;
 
-  if (type === 'string') return `${c.yellow}"${String(value)}"${c.reset}`;
+  if (type === 'string') return `${c.yellow}"${stripControlChars(String(value))}"${c.reset}`;
   if (type === 'number') return `${c.magenta}${String(value)}${c.reset}`;
   if (type === 'boolean') return `${c.green}${String(value)}${c.reset}`;
 

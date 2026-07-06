@@ -81,8 +81,6 @@ export interface LoggerOptions {
   maxArrayLength?: number;
   /** Sampling rate for debug logs in production (0-1) */
   samplingRate?: number;
-  /** Enable timestamps in output */
-  timestamps?: boolean;
   /** Enable silent mode (no console output) */
   silent?: boolean;
   /** Enable redaction of sensitive keys (default: true in production, false in dev/test) */
@@ -104,7 +102,6 @@ export interface ResolvedLoggerOptions {
   maxStringLength: number;
   maxArrayLength: number;
   samplingRate: number;
-  timestamps: boolean;
   silent: boolean;
   redact: boolean;
   env: LoggerEnvironment;
@@ -137,6 +134,8 @@ export interface SerializationOptions {
   maxDepth: number;
   maxStringLength: number;
   maxArrayLength: number;
+  /** Maximum number of object keys serialized before truncating (default: 100) */
+  maxKeys: number;
   sensitiveKeys: string[];
   seen: WeakSet<object>;
   depth: number;
