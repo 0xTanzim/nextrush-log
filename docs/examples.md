@@ -25,10 +25,8 @@ For large applications, set up centralized logging configuration.
 // src/lib/logger.ts
 import {
   configure,
-  configureFromEnv,
   createLogger,
   addGlobalTransport,
-  enableNamespaces,
 } from '@nextrush/log';
 
 /**
@@ -36,20 +34,15 @@ import {
  * Call once at app startup.
  */
 export function initializeLogging() {
-  // Read from environment variables
-  configureFromEnv((name) => process.env[name]);
-
-  // Or configure explicitly
   configure({
     enabled: process.env.NODE_ENV !== 'test',
     minLevel: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
     env: process.env.NODE_ENV as 'development' | 'production',
+    // In production, only log from important modules
+    ...(process.env.NODE_ENV === 'production' && {
+      enabledNamespaces: ['api:*', 'auth:*', 'payments:*', 'critical:*'],
+    }),
   });
-
-  // In production, only log from important modules
-  if (process.env.NODE_ENV === 'production') {
-    enableNamespaces(['api:*', 'auth:*', 'payments:*', 'critical:*']);
-  }
 
   // Send errors to monitoring service
   addGlobalTransport((entry) => {
@@ -119,9 +112,8 @@ src/
 if (typeof window !== 'undefined') {
   (window as any).__debug = {
     enableLogs: () => {
-      import('@nextrush/log').then(({ enableLogging, setGlobalLevel }) => {
-        enableLogging();
-        setGlobalLevel('debug');
+      import('@nextrush/log').then(({ configure }) => {
+        configure({ enabled: true, minLevel: 'debug' });
         console.log('✅ Logging enabled');
       });
     },
@@ -131,18 +123,12 @@ if (typeof window !== 'undefined') {
         console.log('❌ Logging disabled');
       });
     },
-    showConfig: () => {
-      import('@nextrush/log').then(({ getGlobalConfig }) => {
-        console.log(getGlobalConfig());
-      });
-    },
   };
 }
 
 // Usage in browser console:
 // __debug.enableLogs()
 // __debug.disableLogs()
-// __debug.showConfig()
 ```
 
 ---

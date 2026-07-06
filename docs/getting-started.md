@@ -20,17 +20,21 @@ Six levels from most verbose to most critical (internal priority **0–5** — s
 | `warn` | Something wrong but recoverable |
 | `error` / `fatal` | Failures |
 
-Setting `minLevel: 'warn'` shows **warn, error, and fatal** only. Global `configure({ minLevel })` is a **floor**: the **stricter** of the global floor and each logger’s `minLevel` wins — see [Global configuration](/global-configuration).
+Setting `minLevel: 'warn'` shows **warn, error, and fatal** only. Global `configure({ minLevel })` is a **floor**: the **stricter** of the global floor and each logger's `minLevel` wins — see [Global configuration](/global-configuration).
 
 ## Environment Defaults
 
 The logger auto-detects your environment:
 
-| Setting | Development | Test | Production |
-|---------|:-----------:|:----:|:----------:|
-| `minLevel` | `trace` | `trace` | `info` |
-| Output | Pretty + Colors | Pretty + Colors | JSON |
-| Redaction | Off | Off | On |
+| Setting | Development | Test | Production | Undetected |
+|---------|:-----------:|:----:|:----------:|:----------:|
+| `minLevel` | `trace` | `trace` | `info` | `trace` |
+| Output | Pretty + Colors | Pretty + Colors | JSON | Pretty + Colors |
+| Redaction | Off | Off | On | **On** |
+
+When no environment signal is available at all (some edge/serverless platforms don't expose
+`NODE_ENV`), redaction defaults **on** rather than off — a logger should never silently become
+a data leak just because a platform doesn't tell it what environment it's running in.
 
 **Development** — See everything for debugging:
 ```
@@ -155,20 +159,13 @@ import { disableLogging } from '@nextrush/log';
 disableLogging(); // All loggers across all files are now silent
 ```
 
-### Enable All Logging
+### Re-enable / Change the Global Floor
 
 ```typescript
-import { enableLogging } from '@nextrush/log';
+import { configure } from '@nextrush/log';
 
-enableLogging(); // All loggers start logging again
-```
-
-### Set Global Level
-
-```typescript
-import { setGlobalLevel } from '@nextrush/log';
-
-setGlobalLevel('error'); // Global floor: only error + fatal unless a logger is stricter
+configure({ enabled: true });       // Re-enable after disableLogging()
+configure({ minLevel: 'error' });   // Global floor: only error + fatal unless a logger is stricter
 ```
 
 ### Set Minimum Level per Logger

@@ -4,18 +4,24 @@ The logger auto-configures based on your environment.
 
 ## Auto-Detection
 
-The logger reads `NODE_ENV` and applies these defaults:
+The logger reads `NODE_ENV` (and Vite's `MODE`/`PROD`/`DEV`) and applies these defaults:
 
-| Setting | Development | Test | Production |
-|---------|:-----------:|:----:|:----------:|
-| `minLevel` | `trace` | `trace` | `info` |
-| `pretty` | ✅ | ✅ | ❌ (JSON) |
-| `colors` | ✅ | ✅ | ❌ |
-| `redact` | ❌ | ❌ | ✅ |
+| Setting | Development | Test | Production | Undetected |
+|---------|:-----------:|:----:|:----------:|:----------:|
+| `minLevel` | `trace` | `trace` | `info` | `trace` |
+| `pretty` | ✅ | ✅ | ❌ (JSON) | ✅ |
+| `colors` | ✅ | ✅ | ❌ | ✅ |
+| `redact` | ❌ | ❌ | ✅ | **✅** |
+
+**Undetected** means no `NODE_ENV`, no Vite signal, and no explicit `env` option — this can
+happen on some edge/serverless runtimes. Redaction defaults **on** in that case: a logger
+must never silently leak secrets just because a platform doesn't expose `NODE_ENV`. Set
+`env: 'development'` explicitly (or `redact: false`) if you genuinely want unredacted output
+on such a platform, e.g. for local development against an edge runtime emulator.
 
 ## Development Mode
 
-When `NODE_ENV !== 'production'`:
+When `NODE_ENV !== 'production'` (and explicitly resolved, not merely undetected):
 
 - **All logs visible** — trace through fatal
 - **Pretty output** — human-readable, colorful
@@ -45,7 +51,7 @@ When `NODE_ENV === 'production'`:
 // Force production mode (even in development)
 const log = createLogger('App', { env: 'production' });
 
-// Force development mode (even in production)
+// Force development mode (even in production, or on an undetected runtime)
 const log = createLogger('App', { env: 'development' });
 ```
 
@@ -89,56 +95,28 @@ const log = createLogger('App', {
 
 | Variable | Description |
 |----------|-------------|
-| `NODE_ENV` | `'production'` enables JSON output and redaction |
-| `LOG_LEVEL` | Set minimum log level (`trace` … `fatal`) |
-| `LOG_ENABLED` | `'false'` or `'0'` disables all logging |
-| `LOG_NAMESPACES` | Comma-separated namespace patterns (`api:*,auth:*`) |
-| `NEXT_PUBLIC_LOG_LEVEL` | Same as `LOG_LEVEL` when using Next.js **client** env |
-| `NEXT_PUBLIC_LOG_ENABLED` / `VITE_LOG_ENABLED` | Same idea for enable/disable in browser bundles |
-| `VITE_LOG_LEVEL` | Vite / client-side alias for `LOG_LEVEL` |
+| `NODE_ENV` | `'production'` enables JSON output and redaction; unset/undetected also enables redaction (fail-safe) |
 | `DEBUG` | `'true'` enables debug level in production |
 | `ENABLE_DEBUG_LOGS` | Alternative to `DEBUG` |
 | `NO_COLOR` | Disable colored output |
 | `FORCE_COLOR` | Force colored output |
 
-## Configure from Environment
-
-`configureFromEnv` reads the table above. Pass **`getEnvVar`** in Node/Bun and anywhere `getEnvVar` can resolve names (it also consults `import.meta.env` when your bundler defines it):
-
-```typescript
-import { configureFromEnv, getEnvVar } from '@nextrush/log';
-
-configureFromEnv(getEnvVar);
-```
-
-For **Deno** explicitly:
-
-```typescript
-import { configureFromEnv } from '@nextrush/log';
-
-configureFromEnv((name) => Deno.env.get(name));
-```
-
-When `NODE_ENV === 'test'`, `configureFromEnv` sets `defaults.silent` to `true` if you have not set it (quieter test runs).
+These are read automatically by `createLogger()` — there is no separate step to wire them up.
+If you want to read your own `LOG_LEVEL`/`LOG_ENABLED`/`LOG_NAMESPACES` variables and apply
+them globally at startup, do that explicitly with `configure()` — see
+[Global Configuration](./global-configuration.md#reading-configuration-from-environment-variables).
 
 ### Example .env Files
 
 ```bash
 # .env.development
 NODE_ENV=development
-LOG_LEVEL=debug
-LOG_ENABLED=true
-LOG_NAMESPACES=*
 
 # .env.production
 NODE_ENV=production
-LOG_LEVEL=info
-LOG_ENABLED=true
-LOG_NAMESPACES=api:*,auth:*,payments:*
 
 # .env.test
 NODE_ENV=test
-LOG_ENABLED=false
 ```
 
 ## Common Configurations

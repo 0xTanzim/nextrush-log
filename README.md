@@ -10,7 +10,6 @@ Node.js • Bun • Deno • Browser • React • Next.js • Edge
 
 [![npm](https://img.shields.io/npm/v/@nextrush/log?color=blue)](https://www.npmjs.com/package/@nextrush/log)
 [![bundle](https://img.shields.io/bundlephobia/minzip/@nextrush/log?label=size)](https://bundlephobia.com/package/@nextrush/log)
-[![coverage](https://img.shields.io/badge/coverage-89%25-brightgreen)](https://github.com/0xTanzim/nextrush-log)
 [![license](https://img.shields.io/github/license/0xTanzim/nextrush-log)](https://github.com/0xTanzim/nextrush-log/blob/main/LICENSE)
 [![docs](https://img.shields.io/badge/docs-vitepress-blueviolet)](https://0xtanzim.github.io/nextrush-log/)
 
@@ -20,14 +19,13 @@ Node.js • Bun • Deno • Browser • React • Next.js • Edge
 
 ## Why @nextrush/log?
 
-- 🎯 **One config controls ALL loggers** — Singleton pattern for 100+ file projects
-- 🚀 **Zero dependencies** — No bloat, no supply chain risk
-- 🌍 **Universal** — Same API everywhere (Node, Browser, Edge, React)
-- 🔒 **Production-safe** — Auto-redaction, JSON output, level filtering
-- 📦 **Tiny** — Tree-shakeable, minimal bundle impact
-- 🧪 **Well-tested** — 89%+ coverage, 194 tests
+- 🎯 **One config controls ALL loggers** — call `configure()` once, every `createLogger()` obeys it
+- 🚀 **Zero dependencies** — no bloat, no supply-chain risk
+- 🌍 **Universal** — same API on Node, Bun, Deno, edge runtimes, and the browser
+- 🔒 **Production-safe by default** — auto-redaction, log-injection sanitization, and a fail-safe default (redaction stays ON if the runtime environment can't be detected)
+- 📦 **Small, deliberate public API** — ~20 exports total, not hundreds of internal helpers leaking through
 
-**[📖 Documentation](https://0xtanzim.github.io/nextrush-log/)** · **[🔧 API Reference](https://0xtanzim.github.io/nextrush-log/api)** · **[❓ FAQ](https://0xtanzim.github.io/nextrush-log/faq)**
+**[📖 Documentation](https://0xtanzim.github.io/nextrush-log/)** · **[📋 Changelog](./CHANGELOG.md)**
 
 ---
 
@@ -36,6 +34,8 @@ Node.js • Bun • Deno • Browser • React • Next.js • Edge
 ```bash
 npm install @nextrush/log
 ```
+
+> **Coming from v0.2.x?** v0.3.0 is a breaking release that removes redundant/internal exports. See [CHANGELOG.md](./CHANGELOG.md) for the full migration list.
 
 ---
 
@@ -51,62 +51,41 @@ log.warn('High memory', { used: '85%' });
 log.error('Failed', new Error('timeout'));
 ```
 
-**Development** — Pretty, colorful output:
+**Development** — pretty, colorful output:
 ```
 10:30:00 INFO  [MyApp] Server started { port: 3000 }
 10:30:01 WARN  [MyApp] High memory { used: '85%' }
 10:30:02 ERROR [MyApp] Failed Error: timeout
 ```
 
-**Production** — JSON for log aggregators (Datadog, CloudWatch, etc.):
+**Production** — structured JSON for log aggregators (Datadog, CloudWatch, etc.):
 ```json
-{"timestamp":"2025-01-15T10:30:00.000Z","level":"info","context":"MyApp","message":"Server started","data":{"port":3000}}
+{"timestamp":"2026-01-15T10:30:00.000Z","level":"info","context":"MyApp","message":"Server started","data":{"port":3000}}
 ```
 
 ---
 
-## 🎯 Central Control (The Killer Feature)
+## Central Control
 
-**One line controls ALL loggers across your entire application.**
+One call controls every logger created anywhere in your app.
 
 ```typescript
-// app-entry.ts — Configure ONCE at startup
-import { disableLogging, configure, setGlobalLevel } from '@nextrush/log';
+// app-entry.ts — configure ONCE at startup
+import { configure, disableLogging } from '@nextrush/log';
 
-// Option 1: Disable ALL logging instantly
+// Disable ALL logging instantly, from any file
 disableLogging();
 
-// Option 2: Configure globally
+// Or configure globally
 configure({
   enabled: process.env.NODE_ENV !== 'test',
   minLevel: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
 });
-
-// Option 3: Set global level
-setGlobalLevel('error'); // Only errors across ALL loggers
 ```
 
-**How it works:**
-```
-┌─────────────────────────────────────────────────────────────┐
-│              Global Config (Singleton)                       │
-│                                                             │
-│   disableLogging()  ←── Call from ANY file, ONE time        │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-                              │
-           Instantly affects ALL loggers
-                              │
-        ┌─────────────────────┼─────────────────────┐
-        │                     │                     │
-   file1.ts              file2.ts              file3.ts
-   createLogger()        createLogger()        createLogger()
-        │                     │                     │
-        ▼                     ▼                     ▼
-    DISABLED              DISABLED              DISABLED
-```
-
-**No need to change 100+ files.** Just configure once, all loggers obey.
+Every `createLogger()` call anywhere in the codebase — in this file or any
+other — reads that same global config live. No dependency injection, no
+prop-drilling a logger instance through 500 files.
 
 ---
 
@@ -114,37 +93,40 @@ setGlobalLevel('error'); // Only errors across ALL loggers
 
 | Level | Priority | Use Case |
 |-------|:--------:|----------|
-| `trace` | 10 | Detailed debugging |
-| `debug` | 20 | Development info |
-| `info` | 30 | Normal operations ← **production default** |
-| `warn` | 40 | Potential issues |
-| `error` | 50 | Recoverable errors |
-| `fatal` | 60 | Critical failures |
+| `trace` | 0 | Detailed debugging |
+| `debug` | 1 | Development info |
+| `info` | 2 | Normal operations ← **production default** |
+| `warn` | 3 | Potential issues |
+| `error` | 4 | Recoverable errors |
+| `fatal` | 5 | Critical failures |
 
 ```typescript
 const log = createLogger('App', { minLevel: 'warn' });
 
-log.debug('ignored');  // ❌ Below warn
+log.debug('ignored');  // ❌ below warn
 log.warn('logged');    // ✅
 log.error('logged');   // ✅
 ```
 
+The effective minimum level is the **stricter** of the global `configure({ minLevel })` floor and each logger's own `minLevel`.
+
 ---
 
-## Environment Auto-Detection
+## Environment Behavior
 
 | Setting | Development | Production |
 |---------|:-----------:|:----------:|
 | `minLevel` | `trace` | `info` |
-| Output | Pretty | JSON |
-| Colors | ✅ | ❌ |
-| Redaction | ❌ | ✅ |
+| Output | Pretty + colors | JSON |
+| Redaction | Off | On |
+
+Environment is auto-detected from `NODE_ENV` (and Vite's `MODE`/`PROD`/`DEV`). **If no signal is available at all** (common on some edge/serverless runtimes), redaction defaults to **on** rather than silently turning it off — logging must never become a data leak just because a platform doesn't expose `NODE_ENV`.
 
 ```typescript
-// Auto-detects NODE_ENV
+// Auto-detects
 const log = createLogger('App');
 
-// Or force environment
+// Or force it explicitly
 const log = createLogger('App', { env: 'production' });
 ```
 
@@ -155,10 +137,10 @@ const log = createLogger('App', { env: 'production' });
 ### Namespace Filtering (Large Codebases)
 
 ```typescript
-import { enableNamespaces, createLogger } from '@nextrush/log';
+import { configure, createLogger } from '@nextrush/log';
 
 // Only log from specific modules
-enableNamespaces(['api:*', 'auth:*']);
+configure({ enabledNamespaces: ['api:*', 'auth:*'] });
 
 createLogger('api:users').info('Logged');     // ✅
 createLogger('db:queries').info('Ignored');   // ❌
@@ -190,15 +172,17 @@ timer.end('Done', { rows: 100 });
 // "Done" { duration: 42, rows: 100 }
 ```
 
-### Auto-Redaction (Production)
+### Auto-Redaction
 
 ```typescript
 log.info('Login', {
   email: 'john@example.com',
   password: 'secret123',  // → "[REDACTED]"
-  token: 'xyz',           // → "[REDACTED]"
+  token: 'xyz',            // → "[REDACTED]"
 });
 ```
+
+Redaction matches whole key tokens (camelCase/snake_case/kebab-case aware), so it catches `apiKey`/`secret_token` without over-redacting unrelated fields like `primaryKey` or `passport`.
 
 ### Custom Transports
 
@@ -216,19 +200,52 @@ const { transport, flush } = createBatchTransport(
 log.addTransport(transport);
 ```
 
+### Async Context Propagation
+
+```typescript
+import { createContextMiddleware, runWithContext } from '@nextrush/log';
+
+// Express/Koa-style middleware
+app.use(createContextMiddleware((req) => ({
+  correlationId: req.headers['x-request-id'],
+  metadata: { userId: req.user?.id },
+})));
+
+// Or manually
+await runWithContext({ correlationId: 'req-123' }, async () => {
+  log.info('Every log in here automatically gets correlationId: req-123');
+});
+```
+
+Uses `AsyncLocalStorage` on Node; on runtimes without it, context propagation is scoped to avoid cross-request state bleed rather than falling back to unsafe shared state.
+
 ---
 
-## React Integration
+## Browser & React
+
+```typescript
+import { createLogger } from '@nextrush/log';
+
+const log = createLogger('App');
+log.info('Works in the browser too — same API.');
+```
+
+Optional browser-specific helpers (error capture, beacon transport for page-unload delivery):
+
+```typescript
+import { setupBrowserLogging } from '@nextrush/log/browser';
+
+const { logger, cleanup } = setupBrowserLogging({ context: 'MyApp' });
+```
+
+React integration:
 
 ```tsx
 import { LoggerProvider, useLogger } from '@nextrush/log/react';
 
 function App() {
   return (
-    <LoggerProvider
-      context="MyApp"
-      globalConfig={{ enabled: process.env.NODE_ENV !== 'test' }}
-    >
+    <LoggerProvider context="MyApp">
       <MyComponent />
     </LoggerProvider>
   );
@@ -242,27 +259,52 @@ function MyComponent() {
 
 ---
 
+## Testing Your Code
+
+```typescript
+import { createMockLogger, expectLogged } from '@nextrush/log/testing';
+
+const mockLog = createMockLogger();
+myFunction(mockLog);
+
+expectLogged(mockLog, 'info', 'Operation completed');
+```
+
+The mock logger parses arguments identically to the real `Logger`, so assertions against it match production behavior.
+
+---
+
 ## API Quick Reference
 
 | Function | Description |
 |----------|-------------|
 | `createLogger(name, options?)` | Create a logger instance |
+| `log` | Default pre-built logger instance |
 | `configure(options)` | Set global configuration |
 | `disableLogging()` | Disable ALL logging globally |
-| `enableLogging()` | Re-enable logging |
-| `setGlobalLevel(level)` | Set global minimum level |
-| `enableNamespaces(patterns)` | Filter by namespace patterns |
-| `addGlobalTransport(fn)` | Add transport to ALL loggers |
+| `addGlobalTransport(fn)` | Add a transport to ALL loggers |
+| `createBatchTransport(...)` | Buffer + flush logs on an interval/size threshold |
+| `createFilteredTransport(...)` | Only forward logs at/above a minimum level |
+| `createRateLimitedTransport(...)` | Token-bucket rate limiting for a transport |
+| `runWithContext(ctx, fn)` | Run code with async correlation-ID/metadata context |
+| `createContextMiddleware(fn)` | Express/Koa-style middleware for `runWithContext` |
+| `getAsyncContext()` | Read the current async context |
 
 | Logger Method | Description |
 |---------------|-------------|
-| `log.trace/debug/info/warn/error/fatal()` | Log at level |
-| `log.child(name)` | Create child logger |
-| `log.withCorrelationId(id)` | Add correlation ID |
-| `log.time(label?)` | Start performance timer |
-| `log.setLevel(level)` | Change level at runtime |
-| `log.isLevelEnabled(level)` | Check if level would log |
-| `log.addTransport(fn)` | Add custom transport |
+| `log.trace/debug/info/warn/error/fatal()` | Log at a level |
+| `log.child(name)` | Create a child logger |
+| `log.withCorrelationId(id)` | Add a correlation ID |
+| `log.withMetadata(data)` | Add metadata to all subsequent logs |
+| `log.time(label?)` | Start a performance timer |
+| `log.setLevel(level)` | Change the minimum level at runtime |
+| `log.isLevelEnabled(level)` | Check if a level would log |
+| `log.addTransport(fn)` | Add a custom transport to this logger |
+
+Additional configuration fields, submodule internals, and less-common
+helpers still exist — see [CHANGELOG.md](./CHANGELOG.md) and the
+[API reference](https://0xtanzim.github.io/nextrush-log/api) for the full
+surface.
 
 ---
 
@@ -272,8 +314,7 @@ function MyComponent() {
 - 🎛️ [Global Configuration](https://0xtanzim.github.io/nextrush-log/global-configuration)
 - 📚 [API Reference](https://0xtanzim.github.io/nextrush-log/api)
 - 💡 [Examples](https://0xtanzim.github.io/nextrush-log/examples)
-- ✅ [Best Practices](https://0xtanzim.github.io/nextrush-log/best-practices)
-- ❓ [FAQ](https://0xtanzim.github.io/nextrush-log/faq)
+- 📋 [Changelog](./CHANGELOG.md)
 
 ---
 

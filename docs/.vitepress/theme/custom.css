@@ -1,6 +1,6 @@
 /**
  * @nextrush/log — documentation theme
- * Refined typography, calm palette, clear hierarchy
+ * Refined typography, calm palette, layered elevation, clear hierarchy.
  */
 
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap');
@@ -14,17 +14,46 @@
   --vp-font-family-base: 'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --vp-font-family-mono: 'JetBrains Mono', 'Consolas', monospace;
   --doc-radius: 12px;
+  --doc-radius-sm: 8px;
+
+  /* Elevation scale — layered shadows, not flat borders. Cool-toned so they
+     read as "depth" rather than a generic drop-shadow smudge. */
+  --doc-shadow-sm: 0 1px 2px rgba(30, 41, 59, 0.04), 0 1px 3px rgba(30, 41, 59, 0.06);
+  --doc-shadow-md: 0 4px 12px rgba(30, 41, 59, 0.06), 0 2px 4px rgba(30, 41, 59, 0.05);
+  --doc-shadow-lg: 0 12px 32px rgba(30, 41, 59, 0.1), 0 4px 8px rgba(30, 41, 59, 0.05);
+  --doc-shadow-brand: 0 8px 20px rgba(79, 70, 229, 0.22), 0 2px 6px rgba(79, 70, 229, 0.18);
+
+  /* Icon chip backdrop — a soft brand-tinted gradient instead of flat gray,
+     so emoji icons read as one designed system with the hero gradient. */
+  --doc-icon-bg: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(168, 85, 247, 0.1));
+  --doc-icon-border: rgba(99, 102, 241, 0.16);
 }
 
 .dark {
-  --vp-c-bg: #0c0e14;
-  --vp-c-bg-alt: #12151f;
-  --vp-c-bg-elv: #161a26;
-  --vp-c-border: rgba(255, 255, 255, 0.08);
+  --vp-c-bg: #0b0d14;
+  --vp-c-bg-alt: #10131c;
+  /* Distinctly lighter than --vp-c-bg so elevated surfaces (cards) actually
+     read as "raised" against the near-black page background — the previous
+     value was too close to --vp-c-bg to register as depth. */
+  --vp-c-bg-soft: #1a1e2c;
+  --vp-c-bg-elv: #171b28;
+  --vp-c-border: rgba(255, 255, 255, 0.09);
   --vp-c-brand-1: #818cf8;
   --vp-c-brand-2: #a5b4fc;
   --vp-c-brand-3: #c4b5fd;
-  --vp-c-brand-soft: rgba(129, 140, 248, 0.15);
+  --vp-c-brand-soft: rgba(129, 140, 248, 0.16);
+
+  /* Dark-mode shadows lean on a subtle brand-tinted glow + a hairline border
+     rather than pure black shadow, which is nearly invisible on dark bg. */
+  --doc-shadow-sm: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 1px 2px rgba(0, 0, 0, 0.4);
+  --doc-shadow-md: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 6px 16px rgba(0, 0, 0, 0.45),
+    0 0 24px rgba(99, 102, 241, 0.06);
+  --doc-shadow-lg: 0 0 0 1px rgba(255, 255, 255, 0.07), 0 16px 40px rgba(0, 0, 0, 0.55),
+    0 0 32px rgba(129, 140, 248, 0.08);
+  --doc-shadow-brand: 0 8px 24px rgba(129, 140, 248, 0.28), 0 0 0 1px rgba(129, 140, 248, 0.15);
+
+  --doc-icon-bg: linear-gradient(135deg, rgba(129, 140, 248, 0.16), rgba(196, 181, 253, 0.12));
+  --doc-icon-border: rgba(165, 180, 252, 0.18);
 }
 
 /* Home hero */
@@ -38,31 +67,134 @@
   );
 }
 
+/* Tighten the oversized default gap above the hero, but keep real breathing
+   room below the nav bar — too little padding here crowds the title against
+   the header. */
+.VPHome .VPHero {
+  padding-top: 3.5rem !important;
+  padding-bottom: 3rem !important;
+}
+
 .VPHome .VPHero .name,
 .VPHome .VPHero .text {
   font-weight: 600;
   letter-spacing: -0.03em;
 }
 
+/* Left-aligned to match the title/actions column — VitePress's no-image
+   hero layout keeps name/text/actions flush left, so centering only the
+   tagline (as this previously did) produced a jarring zig-zag. Capping
+   max-width still keeps the line length readable (45-75ch). */
 .VPHome .VPHero .tagline {
   font-size: 1.15rem;
   line-height: 1.65;
   max-width: 40rem;
-  margin-left: auto;
-  margin-right: auto;
   opacity: 0.9;
 }
 
+/* Primary CTA gets a brand-colored shadow — the "lift" a premium button
+   needs; secondary action stays flat/quiet so the primary reads dominant. */
+.VPHome .VPButton.brand {
+  box-shadow: var(--doc-shadow-brand);
+  transition: box-shadow 0.2s ease, transform 0.15s ease;
+}
+
+.VPHome .VPButton.brand:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(79, 70, 229, 0.28), 0 3px 8px rgba(79, 70, 229, 0.2);
+}
+
+.dark .VPHome .VPButton.brand:hover {
+  box-shadow: 0 10px 28px rgba(129, 140, 248, 0.36), 0 0 0 1px rgba(129, 140, 248, 0.2);
+}
+
+/* Feature cards — real resting-state elevation, not a flat bordered box.
+   Border is now a hairline separator; the shadow scale carries the depth. */
 .VPHome .VPFeature {
   border-radius: var(--doc-radius);
   border: 1px solid var(--vp-c-border);
+  background-color: var(--vp-c-bg-elv);
+  box-shadow: var(--doc-shadow-sm);
   transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
 .VPHome .VPFeature:hover {
   border-color: var(--vp-c-brand-soft);
-  box-shadow: 0 8px 32px rgba(79, 70, 229, 0.08);
-  transform: translateY(-1px);
+  box-shadow: var(--doc-shadow-md);
+  transform: translateY(-2px);
+}
+
+/* Icon chip — a soft brand-tinted gradient square, with the icon glyph
+   recolored to the brand indigo via mask-image (an <img src="...svg"> can't
+   take `currentColor`, so this is the standard technique: mask the image's
+   own shape and paint a background-color instead of showing the raw image).
+   Current VitePress markup renders the icon as a bare `img.VPImage` inside
+   `.box` with no wrapper div — style the img's own box as the chip rather
+   than a `.icon` wrapper class, which doesn't exist in this DOM.
+   Replaces the previous literal-emoji icons, which read as an unstyled
+   default rather than a designed icon set. */
+.VPHome .VPFeature .box > img.VPImage {
+  width: 48px;
+  height: 48px;
+  /* Collapse the raw (black) SVG pixels to nothing; the chip's background/
+     border live on .box::after below since opacity/visibility on this
+     element would also hide the border+background we still want to show. */
+  clip-path: inset(50%);
+}
+
+.VPHome .VPFeature .box {
+  position: relative;
+}
+
+.VPHome .VPFeature .box::after {
+  content: '';
+  position: absolute;
+  top: 24px;
+  left: 24px;
+  width: 48px;
+  height: 48px;
+  background: var(--doc-icon-bg);
+  border: 1px solid var(--doc-icon-border);
+  border-radius: var(--doc-radius-sm);
+  z-index: 0;
+}
+
+.VPHome .VPFeature .box::before {
+  content: '';
+  position: absolute;
+  top: 36px;
+  left: 36px;
+  width: 24px;
+  height: 24px;
+  background-color: var(--vp-c-brand-1);
+  -webkit-mask-image: var(--icon-mask);
+  mask-image: var(--icon-mask);
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  z-index: 1;
+}
+
+.VPHome .item:nth-of-type(1) .VPFeature .box::before {
+  --icon-mask: url('/nextrush-log/icons/globe.svg');
+}
+.VPHome .item:nth-of-type(2) .VPFeature .box::before {
+  --icon-mask: url('/nextrush-log/icons/sliders.svg');
+}
+.VPHome .item:nth-of-type(3) .VPFeature .box::before {
+  --icon-mask: url('/nextrush-log/icons/shield.svg');
+}
+.VPHome .item:nth-of-type(4) .VPFeature .box::before {
+  --icon-mask: url('/nextrush-log/icons/zap.svg');
+}
+.VPHome .item:nth-of-type(5) .VPFeature .box::before {
+  --icon-mask: url('/nextrush-log/icons/layout.svg');
+}
+.VPHome .item:nth-of-type(6) .VPFeature .box::before {
+  --icon-mask: url('/nextrush-log/icons/check.svg');
 }
 
 /* Content: readable measure */
@@ -75,16 +207,25 @@
   letter-spacing: -0.02em;
 }
 
-/* Tables */
+/* Tables — subtle elevation instead of a flat 1px box, consistent with the
+   card treatment above. Wrapped in a horizontally-scrollable block so wide
+   tables never force page-level horizontal scroll on narrow viewports —
+   `overflow: hidden` on the table itself (for the rounded corners) would
+   otherwise clip content instead of letting it scroll. */
 .vp-doc table {
-  display: table;
-  width: 100%;
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
   font-size: 0.9rem;
   border-collapse: separate;
   border-spacing: 0;
   border-radius: var(--doc-radius);
-  overflow: hidden;
   border: 1px solid var(--vp-c-border);
+  box-shadow: var(--doc-shadow-sm);
+}
+
+.vp-doc table > * {
+  width: 100%;
 }
 
 .vp-doc th,
@@ -103,10 +244,16 @@
   text-align: left;
 }
 
-/* Code */
+.vp-doc tr:hover td {
+  background: var(--vp-c-bg-soft);
+}
+
+/* Code blocks — lift them off the page slightly, matching the card/table
+   elevation language instead of sitting flat. */
 .vp-doc div[class*='language-'] {
   border-radius: var(--doc-radius);
   margin: 1rem 0;
+  box-shadow: var(--doc-shadow-sm);
 }
 
 /* Sidebar polish */
@@ -116,4 +263,11 @@
   text-transform: uppercase;
   letter-spacing: 0.06em;
   opacity: 0.7;
+}
+
+/* Custom containers (tip/warning/danger) — give them a touch of elevation
+   too, so the whole content surface language stays consistent. */
+.vp-doc .custom-block {
+  border-radius: var(--doc-radius-sm);
+  box-shadow: var(--doc-shadow-sm);
 }

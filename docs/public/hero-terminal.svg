@@ -1,0 +1,52 @@
+<svg width="480" height="380" viewBox="0 0 480 380" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="heroTitle">
+  <title id="heroTitle">Terminal showing @nextrush/log output</title>
+  <defs>
+    <linearGradient id="hlGrad" x1="0" y1="0" x2="480" y2="380" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#6366f1" />
+      <stop offset="100%" stop-color="#a855f7" />
+    </linearGradient>
+    <filter id="hlShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#4f46e5" flood-opacity="0.25" />
+    </filter>
+  </defs>
+
+  <g transform="rotate(-2 240 190)" filter="url(#hlShadow)">
+    <rect x="40" y="40" width="400" height="300" rx="16" fill="#12141f" stroke="#2a2e3f" stroke-width="1.5" />
+
+    <rect x="40" y="40" width="400" height="34" rx="16" fill="#181b28" />
+    <rect x="40" y="58" width="400" height="16" fill="#181b28" />
+    <circle cx="62" cy="57" r="5.5" fill="#f87171" />
+    <circle cx="80" cy="57" r="5.5" fill="#fbbf24" />
+    <circle cx="98" cy="57" r="5.5" fill="#34d399" />
+    <text x="118" y="61" font-family="JetBrains Mono, monospace" font-size="11" fill="#7d8299">app.ts</text>
+
+    <g font-family="JetBrains Mono, monospace" font-size="12.5">
+      <text x="64" y="106" fill="#f472b6">const</text>
+      <text x="105" y="106" fill="#e5e7eb">log</text>
+      <text x="128" y="106" fill="#7d8299">=</text>
+      <text x="142" y="106" fill="#a5b4fc">createLogger</text>
+      <text x="228" y="106" fill="#7d8299">(</text>
+      <text x="236" y="106" fill="#34d399">'MyApp'</text>
+      <text x="286" y="106" fill="#7d8299">);</text>
+
+      <text x="64" y="150" fill="#7d8299">10:30:00</text>
+      <text x="130" y="150" fill="#a5b4fc" font-weight="700">INFO</text>
+      <text x="168" y="150" fill="#c7cad1">[MyApp] Server started</text>
+
+      <text x="64" y="182" fill="#7d8299">10:30:01</text>
+      <text x="130" y="182" fill="#fbbf24" font-weight="700">WARN</text>
+      <text x="168" y="182" fill="#c7cad1">[MyApp] High memory</text>
+
+      <text x="64" y="214" fill="#7d8299">10:30:02</text>
+      <text x="130" y="214" fill="#f87171" font-weight="700">ERROR</text>
+      <text x="174" y="214" fill="#c7cad1">[MyApp] Failed: timeout</text>
+    </g>
+
+    <rect x="64" y="240" width="352" height="70" rx="10" fill="#181b28" stroke="#2a2e3f" />
+    <text x="80" y="264" font-family="JetBrains Mono, monospace" font-size="10.5" fill="#7d8299">production (JSON)</text>
+    <text x="80" y="288" font-family="JetBrains Mono, monospace" font-size="10.5" fill="#a5b4fc">{"level":"info","msg":"Server started"}</text>
+  </g>
+
+  <circle cx="410" cy="70" r="34" fill="url(#hlGrad)" opacity="0.18" />
+  <circle cx="55" cy="330" r="46" fill="url(#hlGrad)" opacity="0.12" />
+</svg>

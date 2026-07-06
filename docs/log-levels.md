@@ -34,7 +34,7 @@ log.error('failed');  // kept
 
 ## Global + per-logger
 
-`configure({ minLevel })` and `setGlobalLevel()` set a **global floor**. The **stricter** of the global floor and each logger’s `minLevel` wins (so a logger created with `minLevel: 'error'` does not start logging at `info` when the global is `trace`). Details: [Global configuration](/global-configuration).
+`configure({ minLevel })` sets a **global floor**. The **stricter** of the global floor and each logger's `minLevel` wins (so a logger created with `minLevel: 'error'` does not start logging at `info` when the global is `trace`). Details: [Global configuration](/global-configuration).
 
 ## See also
 

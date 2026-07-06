@@ -49,7 +49,7 @@ const log = createLogger('Component2');
 ## Global vs per-logger `silent`
 
 - **`configure({ silent: true })`**: entries are **not** written at all (no console, no transports) while enabled.
-- **`createLogger({ silent: true })`**: skips **console** only; **transports** (instance + global) still run. Use that when you want external sinks without stdout noise.
+- **`createLogger(name, { silent: true })`**: skips **console** only; **transports** (instance + global) still run. Use that when you want external sinks without stdout noise.
 
 ## The Solution
 
@@ -165,25 +165,24 @@ const log = createLogger('File2');
 
 ## Quick Reference
 
-### Disable All Logging
+`configure()` is the single function that covers global on/off, level, silence, namespace
+filtering, and per-logger defaults — there's no separate mutator per field.
+
+### Disable / Re-enable All Logging
 
 ```typescript
-import { disableLogging } from '@nextrush/log';
-disableLogging(); // All loggers across all files stop logging
+import { configure, disableLogging } from '@nextrush/log';
+
+disableLogging();              // All loggers across all files stop logging
+configure({ enabled: true });  // Re-enable
 ```
 
-### Enable All Logging
+### Set the Global Level Floor
 
 ```typescript
-import { enableLogging } from '@nextrush/log';
-enableLogging(); // All loggers start logging again
-```
+import { configure } from '@nextrush/log';
 
-### Set Global Level
-
-```typescript
-import { setGlobalLevel } from '@nextrush/log';
-setGlobalLevel('error'); // Global floor — stricter per-logger minLevel still wins
+configure({ minLevel: 'error' }); // Global floor — stricter per-logger minLevel still wins
 ```
 
 ### Full Configuration
@@ -191,10 +190,10 @@ setGlobalLevel('error'); // Global floor — stricter per-logger minLevel still 
 ```typescript
 import { configure } from '@nextrush/log';
 
-  configure({
-    enabled: true,                    // Master switch
-    minLevel: 'warn',                 // Global floor (stricter vs each logger wins)
-    silent: false,                    // Global silent: no output when true
+configure({
+  enabled: true,                    // Master switch
+  minLevel: 'warn',                 // Global floor (stricter vs each logger wins)
+  silent: false,                    // Global silent: no output when true
   env: 'production',                // Environment preset
   enabledNamespaces: ['api:*'],     // Only these namespaces log
   disabledNamespaces: ['debug:*'],  // These namespaces don't log
@@ -210,10 +209,10 @@ import { configure } from '@nextrush/log';
 Log only from specific parts of your app:
 
 ```typescript
-import { enableNamespaces, createLogger } from '@nextrush/log';
+import { configure, createLogger } from '@nextrush/log';
 
 // Only log from api and auth modules
-enableNamespaces(['api:*', 'auth:*']);
+configure({ enabledNamespaces: ['api:*', 'auth:*'] });
 
 // These will log:
 const apiLog = createLogger('api:users');     // ✅ Matches api:*
@@ -247,43 +246,47 @@ addGlobalTransport((entry) => {
 });
 ```
 
-## Environment Variables
+## Reading Configuration from Environment Variables
+
+There's no dedicated `configureFromEnv()` export on the main barrel — read the variables you
+care about yourself and pass them into `configure()`. This keeps the contract explicit and
+avoids a magic auto-wiring step:
 
 ```typescript
-import { configureFromEnv } from '@nextrush/log';
+// src/lib/logger.ts
+import { configure } from '@nextrush/log';
 
-// Reads LOG_* and NEXT_PUBLIC_* / VITE_* aliases, plus NODE_ENV
-import { configureFromEnv, getEnvVar } from '@nextrush/log';
-configureFromEnv(getEnvVar);
+export function initializeLogging(): void {
+  const level = process.env.LOG_LEVEL;
+  const enabled = process.env.LOG_ENABLED !== 'false' && process.env.LOG_ENABLED !== '0';
+  const namespaces = process.env.LOG_NAMESPACES?.split(',').map((s) => s.trim());
+
+  configure({
+    enabled,
+    ...(level ? { minLevel: level as import('@nextrush/log').LogLevel } : {}),
+    ...(namespaces ? { enabledNamespaces: namespaces } : {}),
+  });
+}
 ```
 
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `LOG_LEVEL` | Minimum log level | `warn` |
-| `NEXT_PUBLIC_LOG_LEVEL` / `VITE_LOG_LEVEL` | Same, for client / Vite bundles | `error` |
 | `LOG_ENABLED` | Enable/disable all logging | `false` |
-| `NEXT_PUBLIC_LOG_ENABLED` / `VITE_LOG_ENABLED` | Same, for client bundles | `0` |
 | `LOG_NAMESPACES` | Comma-separated patterns | `api:*,auth:*` |
-| `NODE_ENV` | `production` / `test` adjust `configureFromEnv` defaults | `production` |
+| `NODE_ENV` | `production` / `test` — read automatically by `createLogger()` for environment defaults | `production` |
 
-When `NODE_ENV=test`, `configureFromEnv` sets `defaults.silent` when unset (quieter tests).
+`NODE_ENV` doesn't need to be wired manually — every `createLogger()` call already reads it
+(see [Environment](./environment.md)). The variables above are for your own opt-in startup
+wiring, not something the package auto-reads.
 
 ## Complete Example
 
 ```typescript
 // ====== src/lib/logger.ts ======
-import {
-  configure,
-  configureFromEnv,
-  createLogger,
-  addGlobalTransport
-} from '@nextrush/log';
+import { addGlobalTransport, configure, createLogger } from '@nextrush/log';
 
 export function initializeLogging() {
-  // Read from environment
-  configureFromEnv((name) => process.env[name]);
-
-  // Or configure explicitly
   configure({
     enabled: process.env.NODE_ENV !== 'test',
     minLevel: process.env.NODE_ENV === 'production' ? 'info' : 'debug',

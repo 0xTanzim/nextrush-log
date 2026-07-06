@@ -92,6 +92,53 @@ function App() {
 }
 ```
 
+### Logging Component Lifecycle
+
+`useLogLifecycle` logs when a component mounts and unmounts:
+
+```tsx
+import { useLogLifecycle } from '@nextrush/log/react';
+
+function MyComponent() {
+  useLogLifecycle('MyComponent');
+  return <div>Hello</div>;
+}
+```
+
+### `withLogger` HOC
+
+Inject a `logger` prop into a component instead of calling the hook directly:
+
+```tsx
+import { withLogger, WithLoggerProps } from '@nextrush/log/react';
+
+interface Props extends WithLoggerProps {
+  label: string;
+}
+
+const Panel = withLogger<Props>('Panel')(({ logger, label }) => {
+  logger.info('Rendering panel');
+  return <div>{label}</div>;
+});
+```
+
+### Re-exported Core API
+
+`@nextrush/log/react` also re-exports the core config/logger API, so you don't need a
+separate import from `@nextrush/log` in a React-only file:
+
+```tsx
+import {
+  configure,
+  createLogger,
+  disableLogging,
+  enableLogging,
+  getGlobalConfig,
+  Logger,
+  setGlobalLevel,
+} from '@nextrush/log/react';
+```
+
 ## Next.js
 
 ### Client Components

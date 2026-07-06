@@ -1,6 +1,12 @@
 # API Reference
 
-Complete API documentation for `@nextrush/log`.
+Complete API documentation for `@nextrush/log` v0.3.0.
+
+> This reference covers the **public surface only** — the ~20 exports available from
+> `@nextrush/log`, `@nextrush/log/browser`, `@nextrush/log/react`, and `@nextrush/log/testing`.
+> Internal helpers (serialization, redaction matching, runtime detection, etc.) are not
+> part of the public contract and are not documented here — see [CHANGELOG](https://github.com/0xTanzim/nextrush-log/blob/main/CHANGELOG.md)
+> if you're migrating from v0.2.x and relied on one of them.
 
 ---
 
@@ -34,19 +40,22 @@ Setting `minLevel` logs that level **and all higher priority levels**:
 
 ## Environment Defaults
 
-The logger auto-configures based on `NODE_ENV`:
+The logger auto-configures based on `NODE_ENV` (and Vite's `MODE`/`PROD`/`DEV`):
 
-| Setting | Development | Test | Production |
-|---------|:-----------:|:----:|:----------:|
-| `minLevel` | `trace` | `trace` | `info` |
-| `pretty` | `true` | `true` | `false` |
-| `colors` | `true` | `true` | `false` |
-| `redact` | `false` | `false` | `true` |
-| `silent` (console) | `false` | `true`* | `false` |
+| Setting | Development | Test | Production | **Undetected** |
+|---------|:-----------:|:----:|:----------:|:---------------:|
+| `minLevel` | `trace` | `trace` | `info` | `trace` |
+| `pretty` | `true` | `true` | `false` | `true` |
+| `colors` | `true` | `true` | `false` | `true` |
+| `redact` | `false` | `false` | `true` | **`true`** |
 
-\* When `NODE_ENV=test`, `configureFromEnv` sets `defaults.silent` unless you already set it.
+**"Undetected"** means no `NODE_ENV`, no Vite env signal, and no explicit `env` option — this
+happens on some edge/serverless runtimes. Redaction fails **safe** in that case (defaults to
+on) rather than silently behaving like development, because a logger must never become a data
+leak just because a platform doesn't expose `NODE_ENV`. An explicit `env: 'development'` or
+`redact: false` always overrides this and disables redaction, as expected.
 
-Override with `env` option or individual settings.
+Override with the `env` option or individual settings.
 
 ---
 
@@ -65,115 +74,55 @@ Override with `env` option or individual settings.
 
 ## Global Configuration
 
-Control all loggers from a single place.
+Control all loggers from a single place. `configure()` is the one function you need — it
+covers every field global config has.
 
 ### configure()
-
-Set global options that affect all loggers.
 
 ```typescript
 import { configure } from '@nextrush/log';
 
 configure({
-  enabled: true,              // Master switch
-  minLevel: 'warn',           // Global floor (stricter of this and each logger’s floor wins)
-  silent: false,              // Global kill: no log output when true
-  env: 'production',          // Environment preset
+  enabled: true,                 // Master switch
+  minLevel: 'warn',              // Global floor (stricter of this and each logger's floor wins)
+  silent: false,                 // Global kill: no log output when true
+  env: 'production',             // Environment preset
   enabledNamespaces: ['api:*'],  // Namespace filtering
   disabledNamespaces: ['debug:*'],
-  defaults: {                 // Defaults for new loggers
+  defaults: {                    // Defaults for new loggers
     pretty: false,
     redact: true,
   },
 });
 ```
 
-### disableLogging() / enableLogging()
+### disableLogging()
 
 ```typescript
-import { disableLogging, enableLogging } from '@nextrush/log';
+import { disableLogging } from '@nextrush/log';
 
-disableLogging(); // All loggers become no-ops
-enableLogging();  // Re-enable logging
-```
-
-### setGlobalLevel()
-
-```typescript
-import { setGlobalLevel } from '@nextrush/log';
-
-setGlobalLevel('error'); // Global floor: stricter vs each logger’s `minLevel` wins
+disableLogging(); // All loggers become no-ops — call configure({ enabled: true }) to re-enable
 ```
 
 ### Namespace Filtering
 
 ```typescript
-import { enableNamespaces, disableNamespaces, isNamespaceEnabled } from '@nextrush/log';
+import { configure } from '@nextrush/log';
 
 // Only log from specific modules
-enableNamespaces(['api:*', 'auth:*']);
+configure({ enabledNamespaces: ['api:*', 'auth:*'] });
 
 // Disable verbose modules
-disableNamespaces(['debug:*', 'trace:*']);
-
-// Check if namespace would log
-if (isNamespaceEnabled('api:users')) {
-  // ...
-}
+configure({ disabledNamespaces: ['debug:*', 'trace:*'] });
 ```
 
 ### Global Transports
 
 ```typescript
-import { addGlobalTransport, clearGlobalTransports } from '@nextrush/log';
+import { addGlobalTransport } from '@nextrush/log';
 
-// Add transport for all loggers
+// Add a transport that receives every log entry from every logger
 addGlobalTransport((entry) => sendToMonitoring(entry));
-
-// Clear all global transports
-clearGlobalTransports();
-```
-
-### configureFromEnv()
-
-```typescript
-import { configureFromEnv } from '@nextrush/log';
-
-// Reads LOG_LEVEL, LOG_ENABLED, LOG_NAMESPACES, NODE_ENV
-// Also: NEXT_PUBLIC_LOG_LEVEL, VITE_LOG_LEVEL, NEXT_PUBLIC_LOG_ENABLED, etc.
-configureFromEnv((name) => process.env[name]);
-```
-
-Or pass `getEnvVar` from the main package (works across runtimes):
-
-```typescript
-import { configureFromEnv, getEnvVar } from '@nextrush/log';
-
-configureFromEnv(getEnvVar);
-```
-
-### getGlobalConfig() / resetGlobalConfig() / clearGlobalLevel()
-
-```typescript
-import { getGlobalConfig, resetGlobalConfig, clearGlobalLevel } from '@nextrush/log';
-
-const config = getGlobalConfig();
-console.log(config.enabled, config.minLevel);
-
-clearGlobalLevel(); // Unset global minLevel (per-logger + defaults apply)
-resetGlobalConfig(); // Full reset to factory defaults
-```
-
-### onConfigChange()
-
-```typescript
-import { onConfigChange } from '@nextrush/log';
-
-const unsubscribe = onConfigChange(() => {
-  console.log('Config changed!');
-});
-
-unsubscribe(); // Stop listening
 ```
 
 ---
@@ -209,10 +158,9 @@ interface LoggerOptions {
   pretty?: boolean;           // Default: true (dev) or false (prod)
   colors?: boolean;           // Default: true (dev) or false (prod)
   silent?: boolean;           // Default: false
-  timestamps?: boolean;       // Default: true
 
   // Security
-  redact?: boolean;           // Default: false (dev) or true (prod)
+  redact?: boolean;           // Default: false (dev/test) or true (prod/undetected)
   sensitiveKeys?: string[];   // Additional keys to redact
 
   // Context
@@ -225,7 +173,7 @@ interface LoggerOptions {
   maxArrayLength?: number;    // Default: 100
 
   // Advanced
-  samplingRate?: number;      // 0-1, for debug logs in production
+  samplingRate?: number;      // 0-1, for debug/trace logs in production
   transports?: LogTransport[];// Custom transports
 }
 ```
@@ -250,33 +198,16 @@ const log = createLogger('API', {
 const log = createLogger('App', { minLevel: 'error' });
 ```
 
-### `log`, `logger`, and `scopedLogger`
-
-The package also exports a **default app logger** and aliases:
+### `log` — the default instance
 
 ```typescript
-import { log, logger, scopedLogger, createLogger } from '@nextrush/log';
+import { log } from '@nextrush/log';
 
-log.info('Same as a pre-built createLogger("app")');
-logger.info('Identical to `log`');
-const auth = scopedLogger('auth:login'); // createLogger('auth:login')
+log.info('Same as createLogger("app")');
 ```
 
-### Level helpers (tree-shakeable)
-
-```typescript
-import {
-  shouldLog,
-  stricterMinLevel,
-  compareLevels,
-  parseLogLevel,
-  isValidLogLevel,
-  LOG_LEVELS,
-  LOG_LEVEL_PRIORITY,
-} from '@nextrush/log';
-```
-
-Use these when you need the same level math as the library (e.g. custom filters).
+`log` is the only pre-built instance the package exports — there is no separate `logger` or
+`scopedLogger` alias; use `createLogger(name)` directly for anything beyond the default.
 
 ---
 
@@ -352,6 +283,10 @@ log.fatal('Cannot start server', new Error('Port 3000 in use'));
 
 Use for: Critical failures, app crashes, unrecoverable errors.
 
+A logging call can never throw into your code — if serializing a poisoned argument
+internally fails, the logger falls back to a minimal `console.error` line instead of
+propagating the failure.
+
 ---
 
 ## Logger Instance Methods
@@ -387,15 +322,11 @@ if (log.isLevelEnabled('debug')) {
 
 ### getContext
 
-Get the logger context name.
-
 ```typescript
 log.getContext(): string
 ```
 
 ### getCorrelationId
-
-Get the current correlation ID.
 
 ```typescript
 log.getCorrelationId(): string | undefined
@@ -403,7 +334,8 @@ log.getCorrelationId(): string | undefined
 
 ### flush
 
-Flush all transports (for graceful shutdown). Only **instance** transports are flushed; global transports are not (unless you flush them yourself).
+Flush all transports that support it (for graceful shutdown). Only **instance**
+transports are flushed; global transports are not (unless you flush them yourself).
 
 ```typescript
 await log.flush(): Promise<void>
@@ -411,7 +343,9 @@ await log.flush(): Promise<void>
 
 ### dispose
 
-Unsubscribe this logger from global config change notifications. Use when you create many **short-lived** loggers to avoid listener buildup.
+Kept for backward compatibility. The current architecture doesn't retain any per-instance
+subscription that needs cleanup, so this is a documented no-op — safe to call, and safe to
+stop calling.
 
 ```typescript
 log.dispose(): void
@@ -426,7 +360,7 @@ log.dispose(): void
 Create a child logger with extended context.
 
 ```typescript
-log.child(context: string, options?: Partial<LoggerOptions>): Logger
+log.child(additionalContext: string, options?: Partial<LoggerOptions>): Logger
 ```
 
 ```typescript
@@ -443,8 +377,6 @@ const verboseDb = dbLog.child('', { minLevel: 'trace' });
 
 ### withCorrelationId
 
-Create a child with a correlation ID for request tracing.
-
 ```typescript
 log.withCorrelationId(id: string): Logger
 ```
@@ -455,8 +387,6 @@ requestLog.info('Processing'); // includes correlationId in output
 ```
 
 ### withMetadata
-
-Create a child with additional metadata.
 
 ```typescript
 log.withMetadata(data: object): Logger
@@ -477,15 +407,9 @@ userLog.info('Action performed'); // includes userId and role
 
 ### time
 
-Start a performance timer.
-
 ```typescript
 log.time(label?: string): Timer
-```
 
-Returns:
-
-```typescript
 interface Timer {
   elapsed(): number; // Get elapsed ms without stopping
   end(message?: string, context?: Record<string, unknown>): number; // Log duration and return ms
@@ -519,8 +443,6 @@ timer.end('Done');
 
 ### addTransport
 
-Add a custom transport function.
-
 ```typescript
 log.addTransport(transport: LogTransport): void
 
@@ -529,16 +451,14 @@ type LogTransport = (entry: LogEntry) => void | Promise<void>;
 
 ```typescript
 log.addTransport((entry) => {
-  fetch('/api/logs', {
-    method: 'POST',
-    body: JSON.stringify(entry),
-  });
+  fetch('/api/logs', { method: 'POST', body: JSON.stringify(entry) });
 });
 ```
 
-### createBatchTransport
+> Console output is always built in — do not add a "console transport" of your own, or every
+> line will print twice.
 
-Batch log entries before sending.
+### createBatchTransport
 
 ```typescript
 import { createBatchTransport } from '@nextrush/log';
@@ -557,10 +477,7 @@ const { transport, flush, destroy } = createBatchTransport(
 ```typescript
 const { transport, flush, destroy } = createBatchTransport(
   async (entries) => {
-    await fetch('/api/logs', {
-      method: 'POST',
-      body: JSON.stringify(entries),
-    });
+    await fetch('/api/logs', { method: 'POST', body: JSON.stringify(entries) });
   },
   { batchSize: 50, flushInterval: 10000 }
 );
@@ -577,8 +494,6 @@ process.on('SIGTERM', async () => {
 
 ### createFilteredTransport
 
-Filter logs by minimum level.
-
 ```typescript
 import { createFilteredTransport } from '@nextrush/log';
 
@@ -590,38 +505,14 @@ const transport = createFilteredTransport(
 
 ```typescript
 // Only send errors to error tracking service
-const errorTransport = createFilteredTransport(
-  (entry) => sendToSentry(entry),
-  'error'
-);
-
+const errorTransport = createFilteredTransport((entry) => sendToSentry(entry), 'error');
 log.addTransport(errorTransport);
-```
-
-### createPredicateTransport
-
-Filter logs by custom predicate.
-
-```typescript
-import { createPredicateTransport } from '@nextrush/log';
-
-const transport = createPredicateTransport(
-  handler: LogTransport,
-  predicate: (entry: LogEntry) => boolean
-);
-```
-
-```typescript
-// Only log entries from API context
-const apiTransport = createPredicateTransport(
-  (entry) => sendToApiLogs(entry),
-  (entry) => entry.context.startsWith('API')
-);
 ```
 
 ### createRateLimitedTransport
 
-Rate limit logs using token bucket algorithm.
+Rate limit logs using a token-bucket algorithm. Accepts an optional per-namespace
+configuration, so you no longer need a separate "namespace rate limited" variant.
 
 ```typescript
 import { createRateLimitedTransport } from '@nextrush/log';
@@ -649,29 +540,16 @@ const { transport, getStats } = createRateLimitedTransport(myTransport, {
 log.addTransport(transport);
 ```
 
-### createNamespaceRateLimitedTransport
-
-Per-namespace rate limiting.
-
-```typescript
-import { createNamespaceRateLimitedTransport } from '@nextrush/log';
-
-const transport = createNamespaceRateLimitedTransport(innerTransport, {
-  'api:*': { maxLogsPerSecond: 100, burstAllowance: 50 },
-  'db:*': { maxLogsPerSecond: 50 },
-  '*': { maxLogsPerSecond: 200 },
-});
-```
-
 ---
 
 ## Async Context
 
-Automatic context propagation across async boundaries.
+Automatic context propagation across async boundaries, backed by `AsyncLocalStorage` on
+Node.js. On runtimes without it (some edge/browser environments), propagation is scoped so
+concurrent calls never observe each other's context — it never falls back to unsafe shared
+state.
 
 ### runWithContext
-
-Run a function with async context.
 
 ```typescript
 import { runWithContext } from '@nextrush/log';
@@ -691,46 +569,12 @@ await runWithContext({ correlationId: 'req-123' }, async () => {
 
 ### getAsyncContext
 
-Get the current async context.
-
 ```typescript
 import { getAsyncContext } from '@nextrush/log';
 
 const ctx = getAsyncContext();
 console.log(ctx?.correlationId);
 console.log(ctx?.metadata);
-```
-
-### getContextCorrelationId
-
-Get just the current correlation ID.
-
-```typescript
-import { getContextCorrelationId } from '@nextrush/log';
-
-const correlationId = getContextCorrelationId();
-```
-
-### getContextMetadata
-
-Get just the current metadata.
-
-```typescript
-import { getContextMetadata } from '@nextrush/log';
-
-const metadata = getContextMetadata();
-```
-
-### isAsyncContextAvailable
-
-Check if AsyncLocalStorage is available.
-
-```typescript
-import { isAsyncContextAvailable } from '@nextrush/log';
-
-if (isAsyncContextAvailable()) {
-  // Use async context
-}
 ```
 
 ### createContextMiddleware
@@ -803,7 +647,6 @@ interface LoggerOptions {
   pretty?: boolean;
   colors?: boolean;
   silent?: boolean;
-  timestamps?: boolean;
   redact?: boolean;
   correlationId?: string;
   metadata?: Record<string, unknown>;
@@ -820,7 +663,11 @@ interface LoggerOptions {
 
 ## Redacted Keys
 
-These keys are automatically redacted in production (`redact: true`):
+These keys are redacted whenever `redact` is on (production by default, and by default
+whenever the environment can't be detected at all — see [Environment Defaults](#environment-defaults)).
+Matching is whole-token based (camelCase/snake_case/kebab-case aware), so `primaryKey`,
+`passport`, `author`, and `wildcard` are **not** redacted just because they contain `key`,
+`pass`, `auth`, or `card` as a substring.
 
 ### Authentication & Authorization
 `password`, `passwd`, `pwd`, `secret`, `token`, `apikey`, `api_key`, `apiSecret`, `api_secret`, `authorization`, `auth`, `bearer`, `credential`, `credentials`
@@ -859,6 +706,10 @@ const log = createLogger('App', {
   sensitiveKeys: ['myCustomSecret', 'internalToken'],
 });
 ```
+
+Values matching an SSN or credit-card-number pattern are also redacted wherever they appear
+inside structured data (not inside the free-text `message` string — prefer passing secrets as
+structured data rather than interpolating them into a message).
 
 ---
 

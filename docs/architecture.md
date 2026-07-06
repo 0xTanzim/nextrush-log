@@ -58,6 +58,12 @@ graph TB
     subgraph Core
         A[core/logger.ts] --> B[core/factory.ts]
         A --> C[core/levels.ts]
+        A --> P[core/parse-log-args.ts]
+        A --> R[core/resolve-options.ts]
+        A --> T[core/transport-pipeline.ts]
+        A --> CFG[core/config.ts]
+        CFG --> CS[core/config-store.ts]
+        CFG --> NM[core/namespace-matcher.ts]
     end
 
     subgraph Processing
@@ -75,8 +81,8 @@ graph TB
     end
 
     subgraph Utilities
-        O[runtime/] --> P[Environment Detection]
-        Q[utils/] --> R[Timestamps]
+        O[runtime/] --> Q2[Environment Detection]
+        Q[utils/] --> R2[Timestamps]
     end
 
     A --> D
@@ -89,39 +95,67 @@ graph TB
 
 ```
 src/
-├── core/           # Logger class and factory
-│   ├── logger.ts   # Main Logger implementation
-│   ├── factory.ts  # createLogger function
-│   └── levels.ts   # Log levels (trace → fatal)
+├── core/                    # Logger class and global configuration
+│   ├── logger.ts            # Logger class — a thin facade delegating to the below
+│   ├── factory.ts           # createLogger function
+│   ├── parse-log-args.ts    # Flexible (message, data, error) argument parsing
+│   ├── resolve-options.ts   # Option/environment resolution, child-option derivation
+│   ├── transport-pipeline.ts # Transport execution (global + instance transports)
+│   ├── config.ts            # Global config: configure()/disableLogging()/etc.
+│   ├── config-store.ts      # createConfigStore() factory backing global config
+│   ├── namespace-matcher.ts # Shared, ReDoS-guarded namespace glob matching
+│   └── levels.ts            # Log levels (trace → fatal)
 │
 ├── serializer/     # Data processing
-│   ├── serialize.ts    # Safe object serialization
-│   ├── redaction.ts    # Sensitive data removal
-│   └── error.ts        # Error stack handling
+│   ├── serialize.ts    # Safe object serialization (dispatches by type)
+│   ├── collections.ts  # Map/Set/Array serializers
+│   ├── redaction.ts    # Sensitive data removal (whole-token key matching)
+│   └── error.ts        # Error serialization (single source, used everywhere)
 │
 ├── formatter/      # Output formatting
-│   ├── pretty.ts   # Terminal human-readable
+│   ├── pretty.ts   # Terminal human-readable (message sanitized before output)
 │   ├── json.ts     # Structured JSON
-│   └── browser.ts  # Browser console (CSS)
+│   └── browser.ts  # Browser console (CSS), message never fed into the format string
 │
 ├── transport/      # Output destinations
-│   ├── console.ts  # Console output
-│   ├── batch.ts    # Batched sending
-│   └── filtered.ts # Predicate / level helpers
+│   ├── console.ts   # Console output (built into every Logger — do not add as a transport)
+│   ├── batch.ts     # Batched sending
+│   ├── filtered.ts  # Level-based filtering
+│   └── ratelimit.ts # Token-bucket rate limiting
 │
 ├── runtime/        # Environment detection
-│   └── index.ts    # Node / browser / edge detection
+│   └── index.ts    # Node / browser / Deno / Bun / edge detection
+│
+├── context/        # Async correlation-ID/metadata propagation
+│   ├── index.ts               # Public runWithContext/getAsyncContext/middleware
+│   ├── async-local-storage.ts # AsyncLocalStorage loading (ESM-safe)
+│   ├── fallback-stack.ts      # Scoped fallback for runtimes without ALS
+│   └── types.ts
 │
 ├── browser/        # Browser-specific utilities
-│   └── index.ts    # Error capture, beacon transport
+│   ├── index.ts             # Barrel
+│   ├── environment.ts       # isBrowser/isServer/isOnline
+│   ├── error-capture.ts     # window.onerror / unhandledrejection capture
+│   ├── beacon-transport.ts  # navigator.sendBeacon transport
+│   ├── lifecycle.ts         # Flush-on-unload
+│   └── setup.ts             # setupBrowserLogging() orchestrator
 │
 ├── react/          # React integration
 │   └── index.tsx   # Provider, hooks, ErrorBoundary
 │
+├── testing/        # Mock logger + assertions (@nextrush/log/testing)
+│   └── index.ts
+│
+├── utils/          # Small shared primitives
+│   ├── time.ts            # Timestamp formatting
+│   ├── colors.ts          # ANSI/terminal colors
+│   ├── console-method.ts  # Single console-method resolver (used by transport + formatter)
+│   └── level-icons.ts      # Shared level icon glyphs
+│
 ├── types/          # TypeScript definitions
 │   └── index.ts    # All type exports
 │
-└── index.ts        # Main entry point
+└── index.ts        # Main entry point — minimal public surface (~20 exports)
 ```
 
 ## Log Entry Structure
@@ -208,16 +242,19 @@ Safe Output
 
 ## Environment Detection
 
-The logger automatically detects the runtime:
+The logger automatically detects the runtime. Detection is priority-ordered — the first
+matching signal wins:
 
 ```typescript
-// Detection order
-1. window + document  → 'browser'
-2. Deno.version       → 'deno'
-3. Bun.version        → 'bun'
-4. EdgeRuntime        → 'edge'
-5. process.versions   → 'node'
-6. fallback           → 'unknown'
+// Detection priority (first match wins)
+1. React Native globals → 'react-native'
+2. window + document    → 'browser'
+3. Worker self context  → 'worker'
+4. Edge runtime globals → 'edge'   (e.g. EdgeRuntime, Cloudflare Workers)
+5. Deno.version         → 'deno'
+6. Bun.version          → 'bun'
+7. process.versions     → 'node'
+8. fallback             → 'unknown'
 ```
 
 ## Performance Considerations

@@ -12,7 +12,10 @@ export default defineConfig({
     'Universal, zero-dependency logger for Node, edge, serverless, browsers, React, and Next.js',
 
   head: [
-    ['link', { rel: 'icon', type: 'image/svg+xml', href: '/logo.svg' }],
+    // Raw `head` entries are NOT auto-prefixed with `base` by VitePress
+    // (unlike themeConfig.logo), so this must include SITE_PATH explicitly
+    // or it 404s under the /nextrush-log/ base in both dev and prod.
+    ['link', { rel: 'icon', type: 'image/svg+xml', href: `${SITE_PATH}logo.svg` }],
     ['meta', { name: 'theme-color', content: '#4f46e5' }],
     ['meta', { name: 'robots', content: 'index, follow' }],
     ['meta', { property: 'og:type', content: 'website' }],

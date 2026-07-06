@@ -5,6 +5,9 @@ hero:
   name: '@nextrush/log'
   text: Universal Logger
   tagline: One API for Node, edge, serverless, browsers, and React — with global singleton config, structured output, and safe redaction.
+  image:
+    src: /hero-terminal.svg
+    alt: Terminal showing @nextrush/log output — info, warn, and error levels, plus JSON production output
   actions:
     - theme: brand
       text: Get Started
@@ -14,22 +17,28 @@ hero:
       link: https://github.com/0xTanzim/nextrush-log
 
 features:
-  - icon: 🌍
+  - icon:
+      src: /icons/globe.svg
     title: Works Everywhere
     details: Node.js, Bun, Deno, browsers, React, Next.js, edge runtimes — one API everywhere.
-  - icon: 🎛️
+  - icon:
+      src: /icons/sliders.svg
     title: Global Control
     details: Disable all logging with one line. Namespace filtering for 500+ file projects.
-  - icon: 🔒
+  - icon:
+      src: /icons/shield.svg
     title: Production Safe
     details: Auto-redacts sensitive data in production. Full visibility in development.
-  - icon: ⚡
+  - icon:
+      src: /icons/zap.svg
     title: Zero Dependencies
     details: No dependencies, tree-shakeable, tiny bundle size.
-  - icon: 🎨
+  - icon:
+      src: /icons/layout.svg
     title: Smart Formatting
     details: Pretty output in development, JSON for production log aggregators.
-  - icon: 🔧
+  - icon:
+      src: /icons/check.svg
     title: Fully Typed
     details: Complete TypeScript support with full type inference.
 ---

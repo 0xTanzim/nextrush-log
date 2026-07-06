@@ -20,6 +20,9 @@ log.addTransport((entry: LogEntry) => {
 });
 ```
 
+> Console output is always built into every `Logger` — don't write your own "console
+> transport", or every line will print twice.
+
 ## Batch Transport
 
 Send logs in batches for better performance:
@@ -71,17 +74,22 @@ const errorTransport = createFilteredTransport(
 log.addTransport(errorTransport);
 ```
 
-## Predicate Transport
-
-Custom filtering logic:
+For any filtering logic beyond a minimum level (e.g. by context or a custom predicate), write
+a plain wrapper function — a transport is just `(entry) => void | Promise<void>`:
 
 ```typescript
-import { createPredicateTransport } from '@nextrush/log';
+function withPredicate(
+  inner: (entry: LogEntry) => void,
+  predicate: (entry: LogEntry) => boolean,
+) {
+  return (entry: LogEntry) => {
+    if (predicate(entry)) inner(entry);
+  };
+}
 
-// Only log entries from API context
-const apiTransport = createPredicateTransport(
+const apiTransport = withPredicate(
   (entry) => sendToApiLogs(entry),
-  (entry) => entry.context.startsWith('API')
+  (entry) => entry.context.startsWith('API'),
 );
 
 log.addTransport(apiTransport);
@@ -89,7 +97,7 @@ log.addTransport(apiTransport);
 
 ## Rate-Limited Transport
 
-Prevent log flooding with token bucket rate limiting:
+Prevent log flooding with token-bucket rate limiting:
 
 ```typescript
 import { createRateLimitedTransport } from '@nextrush/log';
@@ -115,18 +123,19 @@ setInterval(() => {
 }, 60000);
 ```
 
-### Per-Namespace Rate Limits
+### Per-namespace rate limits
+
+There's a single `createRateLimitedTransport` (the old separate
+`createNamespaceRateLimitedTransport` variant was removed as redundant ceremony — see
+[CHANGELOG](https://github.com/0xTanzim/nextrush-log/blob/main/CHANGELOG.md)). For different limits per namespace, create one rate-limited
+transport per namespace pattern and route to it with the predicate pattern above:
 
 ```typescript
-import { createNamespaceRateLimitedTransport } from '@nextrush/log';
+const apiLimited = createRateLimitedTransport(apiTransport, { maxLogsPerSecond: 100 });
+const dbLimited = createRateLimitedTransport(dbTransport, { maxLogsPerSecond: 50 });
 
-const transport = createNamespaceRateLimitedTransport(myTransport, {
-  'api:*': { maxLogsPerSecond: 100, burstAllowance: 50 },
-  'db:*': { maxLogsPerSecond: 50 },
-  '*': { maxLogsPerSecond: 200 }, // Default for unmatched
-});
-
-log.addTransport(transport);
+log.addTransport(withPredicate(apiLimited.transport, (e) => e.context.startsWith('api:')));
+log.addTransport(withPredicate(dbLimited.transport, (e) => e.context.startsWith('db:')));
 ```
 
 ## Multiple Transports
@@ -140,11 +149,8 @@ log.addTransport(centralLoggingTransport);
 // Send only errors to Sentry
 log.addTransport(createFilteredTransport(sentryTransport, 'error'));
 
-// Send API logs to separate service
-log.addTransport(createPredicateTransport(
-  apiLogsTransport,
-  (entry) => entry.context.includes('API')
-));
+// Send API logs to a separate service
+log.addTransport(withPredicate(apiLogsTransport, (entry) => entry.context.includes('API')));
 ```
 
 ## Popular Integrations

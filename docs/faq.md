@@ -83,11 +83,24 @@ Importing doesn't call the function. Only the file that **calls** `configure()` 
 
 ### How do I reset configuration to defaults?
 
-```typescript
-import { resetGlobalConfig } from '@nextrush/log';
+There's no dedicated `resetGlobalConfig()` on the public main barrel — call `configure()` with
+the factory defaults you care about (this is also more explicit about what's actually being
+reset):
 
-resetGlobalConfig(); // Back to factory defaults
+```typescript
+import { configure } from '@nextrush/log';
+
+configure({
+  enabled: true,
+  silent: false,
+  enabledNamespaces: ['*'],
+  disabledNamespaces: [],
+  defaults: {},
+});
 ```
+
+If you're writing tests and want full isolation between test files, prefer creating an
+isolated logger per test (`createLogger(name, options)`) over resetting shared global state.
 
 ---
 
@@ -119,7 +132,7 @@ log.error('logged');
 
 ### How does `configure({ minLevel })` interact with per-logger `minLevel`?
 
-The **stricter** wins: a logger created with `minLevel: 'error'` will not start logging at `info` when the global floor is `trace`. To drop only the **global** floor and keep per-logger rules, use `clearGlobalLevel()` (or `resetGlobalConfig()` for a full reset).
+The **stricter** wins: a logger created with `minLevel: 'error'` will not start logging at `info` when the global floor is `trace`. To drop only the **global** floor and keep per-logger rules, call `configure({ minLevel: undefined })`.
 
 ### How do I change log level at runtime?
 
@@ -431,10 +444,10 @@ Logs automatically go to browser console. Use DevTools → Console tab.
 ### How do I log only from specific modules?
 
 ```typescript
-import { enableNamespaces, createLogger } from '@nextrush/log';
+import { configure, createLogger } from '@nextrush/log';
 
 // Only log from api and auth
-enableNamespaces(['api:*', 'auth:*']);
+configure({ enabledNamespaces: ['api:*', 'auth:*'] });
 
 createLogger('api:users').info('Logged');    // ✅
 createLogger('db:queries').info('Ignored');  // ❌
@@ -451,10 +464,12 @@ createLogger('db:queries').info('Ignored');  // ❌
 ### How do I disable specific namespaces?
 
 ```typescript
-import { enableNamespaces, disableNamespaces } from '@nextrush/log';
+import { configure } from '@nextrush/log';
 
-enableNamespaces(['*']);           // Enable everything
-disableNamespaces(['verbose:*']);  // Except verbose
+configure({
+  enabledNamespaces: ['*'],          // Enable everything
+  disabledNamespaces: ['verbose:*'], // Except verbose
+});
 ```
 
 ---
@@ -463,22 +478,30 @@ disableNamespaces(['verbose:*']);  // Except verbose
 
 ### My logs are not appearing
 
-1. **Check if logging is enabled:**
-   ```typescript
-   import { getGlobalConfig } from '@nextrush/log';
-   console.log(getGlobalConfig()); // Check enabled, minLevel
-   ```
-
-2. **Check log level:**
+1. **Check log level:**
    ```typescript
    const log = createLogger('App');
    console.log(log.isLevelEnabled('debug')); // false if level too high
    ```
 
-3. **Check namespace filtering:**
+2. **Check namespace filtering:**
+
+   `enabledNamespaces` / `disabledNamespaces` are write-only from the public API — there's no
+   exported getter for the resolved namespace state. Narrow it down by trying the log call
+   directly instead:
    ```typescript
-   import { isNamespaceEnabled } from '@nextrush/log';
-   console.log(isNamespaceEnabled('your:namespace'));
+   const log = createLogger('your:namespace');
+   log.info('probe'); // if this is silent, the namespace is filtered out
+   ```
+
+3. **Check global config didn't disable everything:**
+
+   `configure()` is set-only too — there's no public `getGlobalConfig()`. If you suspect a
+   stray `configure({ enabled: false })` or `disableLogging()` call ran somewhere, grep for
+   it, or call `configure({ enabled: true })` explicitly to rule it out.
+   ```typescript
+   import { configure } from '@nextrush/log';
+   configure({ enabled: true, minLevel: 'trace' });
    ```
 
 ### My logs are showing "[REDACTED]"
@@ -532,7 +555,7 @@ Logging is a **cross-cutting concern** used everywhere in an application. The si
 
 1. **Simplicity** - No need to pass logger through every function
 2. **Industry standard** - Winston, Pino, Bunyan all use singletons
-3. **Testability** - `resetGlobalConfig()` makes tests isolated
+3. **Testability** - isolated `createLogger()` instances per test avoid global state entirely
 4. **Performance** - No DI container overhead
 
 ### Is it tree-shakeable?

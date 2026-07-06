@@ -89,17 +89,16 @@ const log = createLogger('queue:rabbitmq');
 ### Filtering by Namespace
 
 ```typescript
-import { enableNamespaces } from '@nextrush/log';
+import { configure } from '@nextrush/log';
 
 // Debug only user-related code
-enableNamespaces(['user:*']);
+configure({ enabledNamespaces: ['user:*'] });
 
 // Debug user and order
-enableNamespaces(['user:*', 'order:*']);
+configure({ enabledNamespaces: ['user:*', 'order:*'] });
 
 // Debug everything except cache
-enableNamespaces(['*']);
-disableNamespaces(['cache:*']);
+configure({ enabledNamespaces: ['*'], disabledNamespaces: ['cache:*'] });
 ```
 
 ## Environment-Based Configuration
@@ -299,8 +298,10 @@ app.use((req, res, next) => {
 ### Filtering by Tenant
 
 ```typescript
+import { configure } from '@nextrush/log';
+
 // Debug specific tenant
-enableNamespaces(['tenant:acme-corp:*']);
+configure({ enabledNamespaces: ['tenant:acme-corp:*'] });
 ```
 
 ## Integration Patterns

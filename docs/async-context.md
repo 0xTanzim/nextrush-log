@@ -40,15 +40,15 @@ app.use(async (req, res, next) => {
 ### Reading Context
 
 ```typescript
-import { getAsyncContext, getContextCorrelationId } from '@nextrush/log';
+import { getAsyncContext } from '@nextrush/log';
 
 function someDeepFunction() {
   const ctx = getAsyncContext();
   console.log(ctx?.correlationId); // 'req-123'
   console.log(ctx?.metadata);      // { userId: '456' }
 
-  // Or get just the correlation ID
-  const corrId = getContextCorrelationId();
+  // There's no separate getContextCorrelationId export — read it off getAsyncContext()
+  const corrId = ctx?.correlationId;
 }
 ```
 
@@ -125,34 +125,6 @@ if (ctx) {
 }
 ```
 
-### `getContextCorrelationId(): string | undefined`
-
-Get just the current correlation ID.
-
-```typescript
-const correlationId = getContextCorrelationId();
-```
-
-### `getContextMetadata(): Record<string, unknown> | undefined`
-
-Get just the current metadata.
-
-```typescript
-const metadata = getContextMetadata();
-```
-
-### `isAsyncContextAvailable(): boolean`
-
-Check if AsyncLocalStorage is available (Node.js only).
-
-```typescript
-if (isAsyncContextAvailable()) {
-  // Use async context features
-} else {
-  // Fallback to manual context passing
-}
-```
-
 ### `createContextMiddleware(getContext): Middleware`
 
 Create Express/Koa-style middleware.
@@ -165,6 +137,11 @@ const middleware = createContextMiddleware((req) => ({
 
 app.use(middleware);
 ```
+
+> **Not part of the public API:** `getContextCorrelationId()` and `isAsyncContextAvailable()`
+> exist internally but aren't re-exported from `@nextrush/log`. Use `getAsyncContext()?.correlationId`
+> instead of the former; `runWithContext()` already handles the AsyncLocalStorage-unavailable
+> case for you, so the latter isn't something you need to branch on (see Troubleshooting below).
 
 ## Runtime Support
 
@@ -238,13 +215,12 @@ runWithContext({
 
 ### 3. Check Availability
 
-```typescript
-import { isAsyncContextAvailable, runWithContext } from '@nextrush/log';
+`isAsyncContextAvailable()` is an internal check, not part of the public API — `runWithContext()`
+already falls back to a scoped context stack on runtimes without `AsyncLocalStorage`, so you
+don't need to branch on it. Just call `runWithContext()` unconditionally:
 
-if (isAsyncContextAvailable()) {
-  await runWithContext(context, handler);
-} else {
-  // Pass context manually
-  await handler(context);
-}
+```typescript
+import { runWithContext } from '@nextrush/log';
+
+await runWithContext(context, handler); // works with or without AsyncLocalStorage
 ```
