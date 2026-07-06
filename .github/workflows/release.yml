@@ -1,0 +1,58 @@
+name: Release
+
+# Automates the full release cycle for every merge to main:
+#   1. If there are pending changesets, open/update a "Version Packages" PR
+#      that bumps package.json and writes the changelog (no publish yet).
+#   2. Once that PR is merged (i.e. this workflow runs again on main with no
+#      pending changesets left), build, test, and publish to npm, tag the
+#      release, and create a GitHub Release — no manual release-cutting
+#      step required.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm build
+      - run: pnpm test
+
+      - name: Create release PR or publish to npm
+        id: changesets
+        uses: changesets/action@v1
+        with:
+          # `pnpm release` = `pnpm build && changeset publish` (package.json).
+          # changesets/action@v1 expects the input name `publish`, not
+          # `publish-script` — that name only applies to the v2 action line.
+          publish: pnpm release
+          commit: 'chore: version packages'
+          title: 'chore: version packages'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
