@@ -45,30 +45,16 @@ jobs:
 
       # TEMPORARY DIAGNOSTIC — remove once the E404 publish failure is
       # root-caused. Does not print the token itself.
-      # NODE_AUTH_TOKEN is read by the ~/.npmrc that actions/setup-node's
-      # registry-url option already wrote earlier in this job.
       - name: Diagnose npm auth and publish access
         run: |
-          echo "=== npm CLI version ==="
-          npm --version
-
           echo "=== npm whoami (confirms token identity) ==="
           npm whoami --registry=https://registry.npmjs.org || echo ">>> npm whoami FAILED"
-
-          echo "=== npm config get registry ==="
-          npm config get registry
-
-          echo "=== resolved .npmrc (token redacted) ==="
-          cat ~/.npmrc | sed -E 's/(_authToken=).*/\1***REDACTED***/'
 
           echo "=== does @nextrush/log already exist on the registry? ==="
           npm view @nextrush/log versions --registry=https://registry.npmjs.org 2>&1 || echo ">>> npm view FAILED"
 
-          echo "=== can this token see @nextrush/log's access level? ==="
-          npm access list packages 0xtanzim --registry=https://registry.npmjs.org 2>&1 || echo ">>> npm access list (by owner) FAILED"
-
-          echo "=== dry-run publish from the built package (no actual publish) ==="
-          npm publish --dry-run --access public --loglevel verbose --registry=https://registry.npmjs.org 2>&1 || echo ">>> dry-run publish FAILED"
+          echo "=== dry-run publish (should now include --access public via publishConfig) ==="
+          npm publish --dry-run --loglevel verbose --registry=https://registry.npmjs.org 2>&1 || echo ">>> dry-run publish FAILED"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
