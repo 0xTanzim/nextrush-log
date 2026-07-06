@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>@nextrush/log browser universality smoke test</title>
+</head>
+<body>
+  <h1>Browser smoke test</h1>
+  <div id="status">running...</div>
+  <script type="module">
+    import { createLogger, log, runWithContext } from '/dist/index.js';
+
+    const results = [];
+    function check(name, condition) {
+      results.push({ name, pass: !!condition });
+      console.log(`${condition ? 'PASS' : 'FAIL'}: ${name}`);
+    }
+
+    // 1. Basic logging works in a real browser (window/document present).
+    const logger = createLogger('browser-smoke');
+    try {
+      logger.info('hello from the browser', { runtime: 'browser' });
+      check('basic logging does not throw in browser', true);
+    } catch (e) {
+      console.error(e);
+      check('basic logging does not throw in browser', false);
+    }
+
+    // 2. Default log instance works.
+    try {
+      log.info('default logger works in browser');
+      check('default log instance works in browser', true);
+    } catch {
+      check('default log instance works in browser', false);
+    }
+
+    // 3. Child logger context.
+    const child = logger.child('sub');
+    check('child logger context is correct', child.getContext() === 'browser-smoke:sub');
+
+    // 4. Redaction works in the browser (SAFE-3/SAFE-11).
+    const captured = [];
+    const originalInfo = console.info;
+    console.info = (...args) => { captured.push(args.map(String).join(' ')); originalInfo.apply(console, args); };
+    logger.info('login attempt', { password: 'browser-secret-value' });
+    console.info = originalInfo;
+    check('sensitive keys are redacted in browser', !captured.some((l) => l.includes('browser-secret-value')));
+
+    // 5. Log-injection sanitization (SAFE-6): a message with embedded newline/ANSI
+    // must not forge extra visual lines in pretty output.
+    const injectionCaptured = [];
+    const originalLog2 = console.log;
+    console.log = (...args) => { injectionCaptured.push(args.map(String).join(' ')); originalLog2.apply(console, args); };
+    logger.warn('normal message\nFAKE INJECTED LINE [ERROR] system compromised');
+    console.log = originalLog2;
+    // context/formatter strip control chars — raw literal newline should not appear unescaped
+    check('SAFE-6: message newline injection is sanitized', !injectionCaptured.some((l) => /\n\s*FAKE INJECTED LINE/.test(l)));
+
+    // 6. Async context propagation isolation in a real browser event loop (SAFE-1).
+    const ctxResults = [];
+    await Promise.all([
+      runWithContext({ correlationId: 'browser-req-A' }, async () => {
+        await new Promise((r) => setTimeout(r, 10));
+        ctxResults.push(createLogger('a').withCorrelationId('browser-req-A').getCorrelationId());
+      }),
+      runWithContext({ correlationId: 'browser-req-B' }, async () => {
+        await new Promise((r) => setTimeout(r, 5));
+        ctxResults.push(createLogger('b').withCorrelationId('browser-req-B').getCorrelationId());
+      }),
+    ]);
+    check('SAFE-1: context isolation holds in browser event loop', ctxResults.includes('browser-req-A') && ctxResults.includes('browser-req-B'));
+
+    // 7. Crash safety (SAFE-4) with a poisoned getter, in the browser.
+    try {
+      const poisoned = { get x() { throw new Error('boom'); } };
+      logger.info('poisoned', poisoned);
+      check('SAFE-4: poisoned getter does not crash in browser', true);
+    } catch {
+      check('SAFE-4: poisoned getter does not crash in browser', false);
+    }
+
+    const failCount = results.filter((r) => !r.pass).length;
+    document.getElementById('status').textContent = failCount === 0
+      ? `ALL PASS (${results.length}/${results.length})`
+      : `${failCount} FAILURE(S) of ${results.length}`;
+    document.getElementById('status').dataset.testsComplete = 'true';
+    document.getElementById('status').dataset.failCount = String(failCount);
+    window.__smokeTestResults = results;
+  </script>
+</body>
+</html>

@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>@nextrush/log — disable/configure/setLevel browser test</title>
+</head>
+<body>
+  <h1>Disable / Configure / setLevel test</h1>
+  <div id="status">running...</div>
+  <script type="module">
+    import { configure, createLogger, disableLogging, log } from '/dist/index.js';
+
+    const results = [];
+    function check(name, condition) {
+      results.push({ name, pass: !!condition });
+      console.log(`${condition ? 'PASS' : 'FAIL'}: ${name}`);
+    }
+
+    function captureConsole(fn) {
+      const captured = [];
+      const originals = { log: console.log, info: console.info, debug: console.debug, warn: console.warn, error: console.error };
+      for (const level of Object.keys(originals)) {
+        console[level] = (...args) => { captured.push(args.map(String).join(' ')); };
+      }
+      try {
+        fn();
+      } finally {
+        Object.assign(console, originals);
+      }
+      return captured;
+    }
+
+    // --- Scenario 1: log -> disable -> log again (must be silent) ---
+    {
+      const logger = createLogger('scenario-1');
+      const beforeDisable = captureConsole(() => logger.info('before disable'));
+      check('scenario 1: logs BEFORE disable', beforeDisable.length > 0);
+
+      disableLogging();
+
+      const afterDisable = captureConsole(() => logger.info('after disable — must be silent'));
+      check('scenario 1: silent AFTER disableLogging()', afterDisable.length === 0);
+
+      // Re-enable for the rest of the scenarios.
+      configure({ enabled: true });
+      const afterReenable = captureConsole(() => logger.info('after re-enable'));
+      check('scenario 1: logs again after configure({ enabled: true })', afterReenable.length > 0);
+    }
+
+    // --- Scenario 2: configure({ enabled: false }) BEFORE any logger is created ---
+    {
+      configure({ enabled: false });
+      const earlyLogger = createLogger('scenario-2-created-after-disable');
+      const captured = captureConsole(() => earlyLogger.info('should be silent — created after global disable'));
+      check('scenario 2: a logger created AFTER configure({enabled:false}) is silent', captured.length === 0);
+      configure({ enabled: true });
+    }
+
+    // --- Scenario 3: a logger created BEFORE disable is still silenced (this is the
+    //     exact class of bug reported: disabling later must still reach already-created loggers) ---
+    {
+      const earlyLogger = createLogger('scenario-3-created-before-disable');
+      const beforeCapture = captureConsole(() => earlyLogger.info('logs before disable'));
+      check('scenario 3 setup: logs before disable', beforeCapture.length > 0);
+
+      disableLogging();
+      const afterCapture = captureConsole(() => earlyLogger.info('must be silent even though logger predates disable'));
+      check('scenario 3: a PRE-EXISTING logger is silenced by a LATER disableLogging()', afterCapture.length === 0);
+
+      configure({ enabled: true });
+    }
+
+    // --- Scenario 4: setLevel at runtime ---
+    {
+      const logger = createLogger('scenario-4', { minLevel: 'trace' });
+      const beforeSetLevel = captureConsole(() => logger.debug('debug before setLevel'));
+      check('scenario 4 setup: debug logs before setLevel(error)', beforeSetLevel.length > 0);
+
+      logger.setLevel('error');
+      const afterSetLevel = captureConsole(() => logger.debug('debug after setLevel(error) — must be silent'));
+      check('scenario 4: debug is silenced after setLevel(\'error\')', afterSetLevel.length === 0);
+
+      const errorStillLogs = captureConsole(() => logger.error('error still logs after setLevel(error)'));
+      check('scenario 4: error still logs after setLevel(\'error\')', errorStillLogs.length > 0);
+    }
+
+    // --- Scenario 5: the default `log` singleton respects disableLogging() too ---
+    {
+      const beforeCapture = captureConsole(() => log.info('default log before disable'));
+      check('scenario 5 setup: default log instance logs', beforeCapture.length > 0);
+
+      disableLogging();
+      const afterCapture = captureConsole(() => log.info('default log after disable — must be silent'));
+      check('scenario 5: default `log` instance is silenced by disableLogging()', afterCapture.length === 0);
+
+      configure({ enabled: true });
+    }
+
+    // --- Scenario 6: global minLevel floor via configure() ---
+    {
+      configure({ minLevel: 'error' });
+      const logger = createLogger('scenario-6');
+      const infoCapture = captureConsole(() => logger.info('info should be silenced by global floor'));
+      check('scenario 6: configure({minLevel:"error"}) silences info on a normal logger', infoCapture.length === 0);
+      const errorCapture = captureConsole(() => logger.error('error still passes global floor'));
+      check('scenario 6: error still passes the global "error" floor', errorCapture.length > 0);
+      configure({ minLevel: undefined });
+    }
+
+    const failCount = results.filter((r) => !r.pass).length;
+    document.getElementById('status').textContent = failCount === 0
+      ? `ALL PASS (${results.length}/${results.length})`
+      : `${failCount} FAILURE(S) of ${results.length}`;
+    window.__disableTestResults = results;
+  </script>
+</body>
+</html>
